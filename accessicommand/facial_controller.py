@@ -26,14 +26,17 @@ LEFT_EYE_INDICES = [362, 385, 387, 263, 373, 380] # Person's Left Eye
 RIGHT_EYE_INDICES = [33, 160, 158, 133, 153, 144]  # Person's Right Eye
 MOUTH_CORNER_INDICES = [61, 291]                   # Person's Mouth Corners
 MOUTH_VERTICAL_INDICES = [13, 14]                 # Person's Inner Lips Vertical
+LEFT_EYEBROW_INDICES = [70, 63, 105, 66, 107]    # Person's Left Eyebrow
+RIGHT_EYEBROW_INDICES = [336, 296, 334, 293, 300] # Person's Right Eyebrow
 
 # Combine all indices we want to draw
-LANDMARKS_TO_DRAW = LEFT_EYE_INDICES + RIGHT_EYE_INDICES + MOUTH_CORNER_INDICES + MOUTH_VERTICAL_INDICES
+LANDMARKS_TO_DRAW = LEFT_EYE_INDICES + RIGHT_EYE_INDICES + MOUTH_CORNER_INDICES + MOUTH_VERTICAL_INDICES + LEFT_EYEBROW_INDICES + RIGHT_EYEBROW_INDICES
 
 # --- State Variables ---
 left_eye_closed_state = False
 right_eye_closed_state = False
 mouth_open_state = False
+eyebrows_raised_state = False
 last_action_time = 0
 action_delay = 0.5
 key_held = None  # To track which key is currently being held down
@@ -41,13 +44,16 @@ key_held = None  # To track which key is currently being held down
 # --- Thresholds ---
 EAR_THRESHOLD = 0.20
 MAR_THRESHOLD = 0.35
+ERR_THRESHOLD = 1.4  # Eyebrow Raise Ratio threshold (adjust based on testing)
 CONSEC_FRAMES_BLINK = 2
 CONSEC_FRAMES_MOUTH = 3
+CONSEC_FRAMES_EYEBROW = 3  # Number of consecutive frames for eyebrow raise detection
 
 # --- Counters ---
 left_blink_counter = 0
 right_blink_counter = 0
 mouth_open_counter = 0
+eyebrow_raise_counter = 0
 
 def calculate_distance(p1, p2):
     return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
@@ -74,6 +80,28 @@ def calculate_mar(landmarks, corner_indices, inner_vertical_indices):
         if horizontal_dist == 0: return 0
         mar = vertical_dist / horizontal_dist
         return mar
+    except IndexError:
+        return 0
+
+def calculate_err(landmarks, eyebrow_indices, eye_indices):
+    """Calculate Eyebrow Raise Ratio (ERR)"""
+    try:
+        # Get eyebrow points (middle and outer points)
+        eyebrow_middle = landmarks[eyebrow_indices[2]]
+        eyebrow_outer = landmarks[eyebrow_indices[4]]
+        
+        # Get corresponding eye points (top of the eye)
+        eye_top = landmarks[eye_indices[1]]
+        
+        # Calculate vertical distance between eyebrow and eye
+        vertical_dist = abs(eyebrow_middle.y - eye_top.y)
+        
+        # Calculate horizontal distance between eyebrow points
+        horizontal_dist = calculate_distance(eyebrow_middle, eyebrow_outer)
+        
+        if horizontal_dist == 0: return 0
+        err = vertical_dist / horizontal_dist
+        return err
     except IndexError:
         return 0
 
@@ -106,6 +134,8 @@ while True:
     ear_left_val = 1.0
     ear_right_val = 1.0
     mar_val = 0.0
+    err_left_val = 0.0
+    err_right_val = 0.0
 
     if results.multi_face_landmarks:
         landmarks = results.multi_face_landmarks[0].landmark
@@ -138,6 +168,18 @@ while True:
 
         mouth_open_state = mouth_open_counter >= CONSEC_FRAMES_MOUTH
 
+        # Calculate eyebrow raise ratios
+        err_left_val = calculate_err(landmarks, LEFT_EYEBROW_INDICES, RIGHT_EYE_INDICES)
+        err_right_val = calculate_err(landmarks, RIGHT_EYEBROW_INDICES, LEFT_EYE_INDICES)
+        avg_err = (err_left_val + err_right_val) / 2
+
+        if avg_err > ERR_THRESHOLD:
+            eyebrow_raise_counter += 1
+        else:
+            eyebrow_raise_counter = max(0, eyebrow_raise_counter - 1)
+
+        eyebrows_raised_state = eyebrow_raise_counter >= CONSEC_FRAMES_EYEBROW
+
         # Key press/hold logic
         if left_eye_closed_state and not right_eye_closed_state:
             if key_held != 'a':
@@ -151,8 +193,12 @@ while True:
                 pyautogui.keyDown('d')
                 key_held = 'd'
                 print("Holding 'd' key")
-        elif left_eye_closed_state and right_eye_closed_state:
-            if key_held != 'k':
+        elif eyebrows_raised_state:
+                release_key()
+                pyautogui.keyDown('j')
+                key_held = 'j'
+                print("Holding 'j' key")
+        elif left_eye_closed_state or right_eye_closed_state:
                 release_key()
                 pyautogui.keyDown('k')
                 key_held = 'k'
@@ -180,6 +226,7 @@ while True:
     left_eye_color = (0, 0, 255) if left_eye_closed_state else (0, 255, 0)
     right_eye_color = (0, 0, 255) if right_eye_closed_state else (0, 255, 0)
     mouth_color = (0, 0, 255) if mouth_open_state else (0, 255, 0)
+    eyebrow_color = (0, 0, 255) if eyebrows_raised_state else (0, 255, 0)
 
     cv2.putText(frame, f"L EYE: {ear_left_val:.2f} ({'Closed' if left_eye_closed_state else 'Open'})", (10, 30),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, left_eye_color, 2)
@@ -187,8 +234,10 @@ while True:
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, right_eye_color, 2)
     cv2.putText(frame, f"MAR: {mar_val:.2f} ({'Open' if mouth_open_state else 'Closed'})", (10, 90),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, mouth_color, 2)
+    cv2.putText(frame, f"ERR: {avg_err:.2f} ({'Raised' if eyebrows_raised_state else 'Normal'})", (10, 120),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, eyebrow_color, 2)
     if key_held:
-        cv2.putText(frame, f"Holding: {key_held}", (10, 120),
+        cv2.putText(frame, f"Holding: {key_held}", (10, 150),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     cv2.imshow('Facial Gesture Controller', frame)
