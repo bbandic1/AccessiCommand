@@ -16,7 +16,7 @@ class VoiceListener:
 
         if action_map is None:
             self.trigger_actions = {
-                "record": lambda: pyautogui.press('space'),
+                "record": lambda: pyautogui.press('e'),
                 "next": lambda: pyautogui.press('down'),
                 "back": lambda: pyautogui.press('left'),
                 "go": lambda: pyautogui.press('right'),
