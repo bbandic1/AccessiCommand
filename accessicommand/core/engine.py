@@ -1,351 +1,253 @@
-# accessicommand/core/engine.py
-import sys
-import os
-import traceback
-import time
-import threading
+# accessicommand/detectors/facial_detector.py
 import cv2
 import mediapipe as mp
+import time
+import math
+# REMOVED: import threading
+import traceback
 
-# Initialize MediaPipe drawing utilities
+# --- MediaPipe Setup ---
+mp_face_mesh = mp.solutions.face_mesh
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
-mp_hands = mp.solutions.hands
-mp_face_mesh = mp.solutions.face_mesh
 
-# Absolute Imports
-try:
-    from accessicommand.config.manager import ConfigManager
-    from accessicommand.detectors.voice_detector import VoiceDetector
-    from accessicommand.detectors.facial_detector import FacialDetector
-    from accessicommand.detectors.hand_detector import HandDetector
-    from accessicommand.actions.registry import get_action_function, ACTION_REGISTRY
-    _imports_ok = True
-except ImportError as e: print(f"ERROR: Import failed: {e}"); sys.exit(1)
-
-# Engine Default Constants
-DEFAULT_VOICE_PAUSE_THRESHOLD = 0.4; DEFAULT_VOICE_ENERGY_THRESHOLD = 350
-DEFAULT_CAMERA_INDEX = 0; DEFAULT_EAR_THRESHOLD = 0.20; DEFAULT_MAR_THRESHOLD = 0.35
-DEFAULT_ERR_THRESHOLD = 1.34; DEFAULT_BOTH_EYES_CLOSED_FRAMES = 2
-DEFAULT_HEAD_TILT_LEFT_MIN = -100; DEFAULT_HEAD_TILT_LEFT_MAX = -160
-DEFAULT_HEAD_TILT_RIGHT_MIN = 100; DEFAULT_HEAD_TILT_RIGHT_MAX = 160
-DEFAULT_CONSEC_FRAMES_MOUTH = 3; DEFAULT_CONSEC_FRAMES_EYEBROW = 3
-DEFAULT_CONSEC_FRAMES_HEAD_TILT = 2; DEFAULT_BLINK_COOLDOWN = 0.3
+# --- Default Configuration Constants ---
+DEFAULT_EAR_THRESHOLD = 0.20
+DEFAULT_MAR_THRESHOLD = 0.35
+DEFAULT_ERR_THRESHOLD = 1.34
+DEFAULT_BOTH_EYES_CLOSED_FRAMES = 2
+DEFAULT_HEAD_TILT_LEFT_MIN = -100
+DEFAULT_HEAD_TILT_LEFT_MAX = -160
+DEFAULT_HEAD_TILT_RIGHT_MIN = 100
+DEFAULT_HEAD_TILT_RIGHT_MAX = 160
 DEFAULT_CONSEC_FRAMES_BLINK = 2
-DEFAULT_HAND_CAMERA_INDEX = 0; DEFAULT_MAX_HANDS = 1
-DEFAULT_DETECTION_CONFIDENCE = 0.7; DEFAULT_TRACKING_CONFIDENCE = 0.5
-DEFAULT_CONSEC_FRAMES_FOR_GESTURE = 5
-DEFAULT_SHOW_FACE_VIDEO = False; DEFAULT_SHOW_HAND_VIDEO = False
+DEFAULT_CONSEC_FRAMES_MOUTH = 3
+DEFAULT_CONSEC_FRAMES_EYEBROW = 3
+DEFAULT_CONSEC_FRAMES_HEAD_TILT = 2
+DEFAULT_BLINK_COOLDOWN = 0.3
 
-class Engine:
-    """ Core engine managing detectors, config, events, and actions. """
-    def __init__(self, config_path="config.json"):
-        print("--- Engine Initializing ---")
-        self.config_manager = ConfigManager(config_path)
-        self.detectors = {}
-        self.bindings = []
-        self.settings = {}
-        self.is_running = False
-        self.main_loop_thread = None
-        self.capture_devices = {}
-        self.visual_detectors_by_cam = {}
-        self.show_combined_video = False
-        self.vis_settings = {}
+# --- Event Name Constants ---
+LEFT_BLINK_EVENT = "LEFT_BLINK"; RIGHT_BLINK_EVENT = "RIGHT_BLINK"
+MOUTH_OPEN_START_EVENT = "MOUTH_OPEN_START"; MOUTH_OPEN_STOP_EVENT = "MOUTH_OPEN_STOP"
+BOTH_EYES_CLOSED_START_EVENT = "BOTH_EYES_CLOSED_START"; BOTH_EYES_CLOSED_STOP_EVENT = "BOTH_EYES_CLOSED_STOP"
+EYEBROWS_RAISED_START_EVENT = "EYEBROWS_RAISED_START"; EYEBROWS_RAISED_STOP_EVENT = "EYEBROWS_RAISED_STOP"
+HEAD_TILT_LEFT_START_EVENT = "HEAD_TILT_LEFT_START"; HEAD_TILT_LEFT_STOP_EVENT = "HEAD_TILT_LEFT_STOP"
+HEAD_TILT_RIGHT_START_EVENT = "HEAD_TILT_RIGHT_START"; HEAD_TILT_RIGHT_STOP_EVENT = "HEAD_TILT_RIGHT_STOP"
 
-        self._load_configuration()
-        self._initialize_actions()
-        self._initialize_detectors()
-        print("--- Engine Initialized ---")
 
-    def _load_configuration(self):
-        print(f"Engine: Loading configuration from '{self.config_manager.config_path}'...")
+class FacialDetector:
+    """ Detects facial gestures from a provided frame and emits events. """
+
+    # --- Landmark Indices ---
+    LEFT_EYE_INDICES = [362, 385, 387, 263, 373, 380]; RIGHT_EYE_INDICES = [33, 160, 158, 133, 153, 144]
+    MOUTH_CORNER_INDICES = [61, 291]; MOUTH_VERTICAL_INDICES = [13, 14]
+    LEFT_EYEBROW_INDICES = [70, 63, 105, 66, 107]; RIGHT_EYEBROW_INDICES = [336, 296, 334, 293, 300]
+    CHIN_INDEX = 152; FOREHEAD_INDEX = 10
+    LANDMARKS_TO_DRAW = LEFT_EYE_INDICES + RIGHT_EYE_INDICES + MOUTH_CORNER_INDICES + MOUTH_VERTICAL_INDICES + LEFT_EYEBROW_INDICES + RIGHT_EYEBROW_INDICES
+
+    def __init__(self, event_handler,
+                 ear_threshold=DEFAULT_EAR_THRESHOLD,
+                 mar_threshold=DEFAULT_MAR_THRESHOLD,
+                 err_threshold=DEFAULT_ERR_THRESHOLD,
+                 both_eyes_closed_frames=DEFAULT_BOTH_EYES_CLOSED_FRAMES,
+                 head_tilt_left_min=DEFAULT_HEAD_TILT_LEFT_MIN,
+                 head_tilt_left_max=DEFAULT_HEAD_TILT_LEFT_MAX,
+                 head_tilt_right_min=DEFAULT_HEAD_TILT_RIGHT_MIN,
+                 head_tilt_right_max=DEFAULT_HEAD_TILT_RIGHT_MAX,
+                 consec_frames_blink=DEFAULT_CONSEC_FRAMES_BLINK,
+                 consec_frames_mouth=DEFAULT_CONSEC_FRAMES_MOUTH,
+                 consec_frames_eyebrow=DEFAULT_CONSEC_FRAMES_EYEBROW,
+                 consec_frames_head_tilt=DEFAULT_CONSEC_FRAMES_HEAD_TILT,
+                 blink_cooldown=DEFAULT_BLINK_COOLDOWN
+                 # REMOVED: camera_index, show_video (Engine handles visualization/camera)
+                ):
+        self.event_handler = event_handler if callable(event_handler) else self._default_handler
+        if not callable(event_handler): print("WARN: No valid event_handler provided to FacialDetector.")
+
+        # Store Configuration
+        self.ear_threshold = ear_threshold; self.mar_threshold = mar_threshold; self.err_threshold = err_threshold
+        self.both_eyes_closed_frames = both_eyes_closed_frames
+        self.head_tilt_left_min = head_tilt_left_min; self.head_tilt_left_max = head_tilt_left_max
+        self.head_tilt_right_min = head_tilt_right_min; self.head_tilt_right_max = head_tilt_right_max
+        self.consec_frames_blink = consec_frames_blink; self.consec_frames_mouth = consec_frames_mouth
+        self.consec_frames_eyebrow = consec_frames_eyebrow; self.consec_frames_head_tilt = consec_frames_head_tilt
+        self.blink_cooldown = blink_cooldown
+
+        # MediaPipe Initialization
+        self.face_mesh = None # Initialized in start()
+
+        # State Variables
+        self.is_active = False # Flag if detector processing is enabled
+        self._reset_states()
+
+        print("--- Facial Detector Initialized (Configured) ---")
+
+    def _reset_states(self):
+        """Resets internal states."""
+        self._prev_mouth_open_state = False; self._prev_eyebrows_raised_state = False
+        self._prev_head_tilt_left_state = False; self._prev_head_tilt_right_state = False
+        self._prev_both_eyes_closed_state = False; self._left_eye_previously_closed = False
+        self._right_eye_previously_closed = False; self._last_left_blink_time = 0
+        self._last_right_blink_time = 0; self._mouth_open_counter = 0
+        self._eyebrow_raise_counter = 0; self._head_tilt_left_counter = 0
+        self._head_tilt_right_counter = 0; self._both_eyes_closed_counter = 0
+        self._left_blink_counter = 0; self._right_blink_counter = 0
+
+    def _default_handler(self, detector_type, event_data): pass
+
+    # --- Calculation Methods (Keep as is) ---
+    def _calculate_distance(self, p1, p2): return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
+    def _calculate_ear(self, eye_landmarks):
+        try: v1=self._calculate_distance(eye_landmarks[1], eye_landmarks[5]); v2=self._calculate_distance(eye_landmarks[2], eye_landmarks[4]); h=self._calculate_distance(eye_landmarks[0], eye_landmarks[3]); return (v1 + v2) / (2.0 * h) if h!=0 else 1.0
+        except IndexError: return 1.0
+    def _calculate_mar(self, landmarks):
+        try: ml=landmarks[self.MOUTH_CORNER_INDICES[0]]; mr=landmarks[self.MOUTH_CORNER_INDICES[1]]; lu=landmarks[self.MOUTH_VERTICAL_INDICES[0]]; ll=landmarks[self.MOUTH_VERTICAL_INDICES[1]]; vd=self._calculate_distance(lu,ll); hd=self._calculate_distance(ml,mr); return vd/hd if hd!=0 else 0.0
+        except IndexError: return 0.0
+    def _calculate_err(self, landmarks, eyebrow_indices, eye_indices):
+         try: bm=landmarks[eyebrow_indices[2]]; bo=landmarks[eyebrow_indices[4]]; et=landmarks[eye_indices[1]]; vd=abs(bm.y - et.y); hd=self._calculate_distance(bm,bo); return vd/hd if hd!=0 else 0.0
+         except IndexError: return 0.0
+    def _calculate_head_tilt(self, landmarks, frame_width, frame_height): # Keep pixel version
         try:
-            self.config_data = self.config_manager.get_config()
-            self.bindings = self.config_manager.get_bindings()
-            self.settings = self.config_manager.get_settings()
-            facial_settings = self.settings.get('facial_detector', {})
-            hand_settings = self.settings.get('hand_detector', {})
-            self.vis_settings['show_face'] = facial_settings.get('show_video', DEFAULT_SHOW_FACE_VIDEO)
-            self.vis_settings['show_hand'] = hand_settings.get('show_video', DEFAULT_SHOW_HAND_VIDEO)
-            self.show_combined_video = self.vis_settings['show_face'] or self.vis_settings['show_hand']
-            print(f"Engine: Loaded {len(self.bindings)} bindings.")
-        except Exception as e:
-            print(f"ERROR loading config: {e}"); traceback.print_exc()
-            self.bindings=[]; self.settings={}
+            chin=landmarks[self.CHIN_INDEX]; fh=landmarks[self.FOREHEAD_INDEX]
+            cx, cy = int(chin.x*frame_width), int(chin.y*frame_height); fx, fy = int(fh.x*frame_width), int(fh.y*frame_height)
+            dx=fx-cx; dy=fy-cy
+            if dy == 0: return 90.0 if dx>0 else -90.0 if dx<0 else 0.0
+            return math.degrees(math.atan2(dx, dy))
+        except IndexError: return 0.0
 
-    def _initialize_actions(self):
-        if not callable(get_action_function):
-            print("ERROR: get_action_function unavailable!")
-        else:
-            print(f"Engine: Action registry OK ({len(ACTION_REGISTRY)} actions).")
+# --- NEW: Process Frame Method ---
+    def process_frame(self, frame, frame_timestamp):
+        """Processes a single frame to detect gestures and emit events."""
+        if not self.is_active or self.face_mesh is None:
+            return None
 
-    def _initialize_detectors(self):
-        print("Engine: Initializing detectors...")
-        self.detectors = {}
-        self.visual_detectors_by_cam = {}
+        frame_height, frame_width, _ = frame.shape
+        frame.flags.writeable = False
+        results = self.face_mesh.process(frame) # Process the RGB frame passed in
+        frame.flags.writeable = True
 
-        # Voice Detector
-        voice_triggers_needed = any(b.get("trigger_type") == "voice" for b in self.bindings)
-        if voice_triggers_needed:
-            try:
-                print("Engine: Initializing VoiceDetector...")
-                voice_settings = self.settings.get('voice_detector', {})
-                self.detectors['voice'] = VoiceDetector(
-                    trigger_words=list(set(str(b.get("trigger_event")).lower() for b in self.bindings if b.get("trigger_type") == "voice" and b.get("trigger_event"))),
-                    event_handler=self.handle_event,
-                    energy_threshold=voice_settings.get('energy_threshold', DEFAULT_VOICE_ENERGY_THRESHOLD),
-                    pause_threshold=voice_settings.get('pause_threshold', DEFAULT_VOICE_PAUSE_THRESHOLD),
-                )
-            except Exception as e: print(f"ERROR init VoiceDetector failed: {e}"); traceback.print_exc()
-        else: print("Engine: No voice bindings found.")
+        # Defaults for this frame
+        ear_left_val, ear_right_val = 1.0, 1.0
+        mar_val, avg_err, head_tilt_angle = 0.0, 0.0, 0.0
+        current_time = frame_timestamp
+        # --- Get the raw landmark object if available ---
+        face_landmarks_object = results.multi_face_landmarks[0] if results.multi_face_landmarks else None
+        landmarks = face_landmarks_object.landmark if face_landmarks_object else None
+        # ------------------------------------------------
 
-        # Visual Detectors
-        visual_detector_configs = {
-            'face': {'class': FacialDetector, 'settings_key': 'facial_detector', 'defaults': {
-                'ear_threshold': DEFAULT_EAR_THRESHOLD, 'mar_threshold': DEFAULT_MAR_THRESHOLD,
-                'err_threshold': DEFAULT_ERR_THRESHOLD, 'both_eyes_closed_frames': DEFAULT_BOTH_EYES_CLOSED_FRAMES,
-                'head_tilt_left_min': DEFAULT_HEAD_TILT_LEFT_MIN, 'head_tilt_left_max': DEFAULT_HEAD_TILT_LEFT_MAX,
-                'head_tilt_right_min': DEFAULT_HEAD_TILT_RIGHT_MIN, 'head_tilt_right_max': DEFAULT_HEAD_TILT_RIGHT_MAX,
-                'consec_frames_blink': DEFAULT_CONSEC_FRAMES_BLINK,
-                'consec_frames_mouth': DEFAULT_CONSEC_FRAMES_MOUTH,
-                'consec_frames_eyebrow': DEFAULT_CONSEC_FRAMES_EYEBROW, 'consec_frames_head_tilt': DEFAULT_CONSEC_FRAMES_HEAD_TILT,
-                'blink_cooldown': DEFAULT_BLINK_COOLDOWN
-            }},
-            'hand': {'class': HandDetector, 'settings_key': 'hand_detector', 'defaults': {
-                'max_num_hands': DEFAULT_MAX_HANDS,
-                'min_detection_confidence': DEFAULT_DETECTION_CONFIDENCE, 'min_tracking_confidence': DEFAULT_TRACKING_CONFIDENCE,
-                'consec_frames_for_gesture': DEFAULT_CONSEC_FRAMES_FOR_GESTURE
-            }}
+        # Local state vars
+        left_eye_closed_state, right_eye_closed_state = False, False
+        mouth_open_state, eyebrows_raised_state = False, False
+        head_tilt_left_state, head_tilt_right_state = False, False
+        both_eyes_closed_state = False
+        left_eye_blinked, right_eye_blinked = False, False
+
+        if landmarks: # Proceed only if landmarks were extracted
+            # Calculations using the 'landmarks' list
+            person_left_eye_points = [landmarks[i] for i in self.LEFT_EYE_INDICES]
+            person_right_eye_points = [landmarks[i] for i in self.RIGHT_EYE_INDICES]
+            ear_left_val = self._calculate_ear(person_left_eye_points)
+            ear_right_val = self._calculate_ear(person_right_eye_points)
+            mar_val = self._calculate_mar(landmarks)
+            err_left = self._calculate_err(landmarks, self.LEFT_EYEBROW_INDICES, self.LEFT_EYE_INDICES)
+            err_right = self._calculate_err(landmarks, self.RIGHT_EYEBROW_INDICES, self.RIGHT_EYE_INDICES)
+            avg_err = (err_left + err_right) / 2.0
+            head_tilt_angle = self._calculate_head_tilt(landmarks, frame_width, frame_height)
+
+            # State Update & Event Emission logic (keep as is)
+            # ... (all the if/else blocks for blinks, mouth, eyes, brows, tilt) ...
+            is_left_closed_now = ear_right_val < self.ear_threshold
+            if is_left_closed_now: self._left_blink_counter += 1; 
+            else: self._left_blink_counter = 0
+            left_eye_closed_state = self._left_blink_counter >= self.consec_frames_blink
+            if left_eye_closed_state and not self._left_eye_previously_closed and current_time - self._last_left_blink_time > self.blink_cooldown and not is_right_closed_now: left_eye_blinked = True; self._last_left_blink_time = current_time
+            self._left_eye_previously_closed = is_left_closed_now
+
+            is_right_closed_now = ear_left_val < self.ear_threshold
+            if is_right_closed_now: self._right_blink_counter += 1; 
+            else: self._right_blink_counter = 0
+            right_eye_closed_state = self._right_blink_counter >= self.consec_frames_blink
+            if right_eye_closed_state and not self._right_eye_previously_closed and current_time - self._last_right_blink_time > self.blink_cooldown and not is_left_closed_now: right_eye_blinked = True; self._last_right_blink_time = current_time
+            self._right_eye_previously_closed = is_right_closed_now
+
+            is_mouth_open_now = mar_val > self.mar_threshold
+            if is_mouth_open_now: self._mouth_open_counter = min(self.consec_frames_mouth, self._mouth_open_counter + 1); 
+            else: self._mouth_open_counter = max(0, self._mouth_open_counter - 1)
+            mouth_open_state = self._mouth_open_counter >= self.consec_frames_mouth
+
+            are_both_eyes_closed_now = is_left_closed_now and is_right_closed_now
+            if are_both_eyes_closed_now: self._both_eyes_closed_counter = min(self.both_eyes_closed_frames, self._both_eyes_closed_counter + 1); 
+            else: self._both_eyes_closed_counter = max(0, self._both_eyes_closed_counter - 1)
+            both_eyes_closed_state = self._both_eyes_closed_counter >= self.both_eyes_closed_frames
+
+            are_eyebrows_raised_now = avg_err > self.err_threshold
+            if are_eyebrows_raised_now: self._eyebrow_raise_counter = min(self.consec_frames_eyebrow, self._eyebrow_raise_counter + 1); 
+            else: self._eyebrow_raise_counter = max(0, self._eyebrow_raise_counter - 1)
+            eyebrows_raised_state = self._eyebrow_raise_counter >= self.consec_frames_eyebrow
+
+            is_tilt_left_now = self.head_tilt_left_min >= head_tilt_angle >= self.head_tilt_left_max
+            is_tilt_right_now = self.head_tilt_right_min <= head_tilt_angle <= self.head_tilt_right_max
+            if is_tilt_left_now: self._head_tilt_left_counter = min(self.consec_frames_head_tilt, self._head_tilt_left_counter + 1); self._head_tilt_right_counter = 0
+            elif is_tilt_right_now: self._head_tilt_right_counter = min(self.consec_frames_head_tilt, self._head_tilt_right_counter + 1); self._head_tilt_left_counter = 0
+            else: self._head_tilt_left_counter = max(0, self._head_tilt_left_counter - 1); self._head_tilt_right_counter = max(0, self._head_tilt_right_counter - 1)
+            head_tilt_left_state = self._head_tilt_left_counter >= self.consec_frames_head_tilt
+            head_tilt_right_state = self._head_tilt_right_counter >= self.consec_frames_head_tilt
+
+
+        # --- Event Emission (keep as is) ---
+        if left_eye_blinked and not right_eye_blinked: self.event_handler("face", LEFT_BLINK_EVENT)
+        if right_eye_blinked and not left_eye_blinked: self.event_handler("face", RIGHT_BLINK_EVENT)
+        if mouth_open_state != self._prev_mouth_open_state: self.event_handler("face", MOUTH_OPEN_START_EVENT if mouth_open_state else MOUTH_OPEN_STOP_EVENT); self._prev_mouth_open_state = mouth_open_state
+        if both_eyes_closed_state != self._prev_both_eyes_closed_state: self.event_handler("face", BOTH_EYES_CLOSED_START_EVENT if both_eyes_closed_state else BOTH_EYES_CLOSED_STOP_EVENT); self._prev_both_eyes_closed_state = both_eyes_closed_state
+        if eyebrows_raised_state != self._prev_eyebrows_raised_state: self.event_handler("face", EYEBROWS_RAISED_START_EVENT if eyebrows_raised_state else EYEBROWS_RAISED_STOP_EVENT); self._prev_eyebrows_raised_state = eyebrows_raised_state
+        if head_tilt_left_state != self._prev_head_tilt_left_state: self.event_handler("face", HEAD_TILT_LEFT_START_EVENT if head_tilt_left_state else HEAD_TILT_LEFT_STOP_EVENT); self._prev_head_tilt_left_state = head_tilt_left_state
+        if head_tilt_right_state != self._prev_head_tilt_right_state: self.event_handler("face", HEAD_TILT_RIGHT_START_EVENT if head_tilt_right_state else HEAD_TILT_RIGHT_STOP_EVENT); self._prev_head_tilt_right_state = head_tilt_right_state
+
+
+        # --- Return data needed for visualization by Engine ---
+        vis_data = {
+            # --- Return the parent object needed for drawing ---
+            "landmark_object": face_landmarks_object,
+            # ---------------------------------------------------
+            "states": { # Send current calculated states
+                "left_eye_closed": left_eye_closed_state, "right_eye_closed": right_eye_closed_state,
+                "mouth_open": mouth_open_state, "eyebrows_raised": eyebrows_raised_state,
+                "head_tilt_left": head_tilt_left_state, "head_tilt_right": head_tilt_right_state,
+                "both_eyes_closed": both_eyes_closed_state,
+            },
+            "values": { # Send calculated values
+                "ear_left": ear_left_val, "ear_right": ear_right_val, "mar": mar_val,
+                "avg_err": avg_err, "head_tilt_angle": head_tilt_angle,
+            }
         }
-        default_face_cam_idx = DEFAULT_CAMERA_INDEX
-        default_hand_cam_idx = DEFAULT_HAND_CAMERA_INDEX
-
-        for det_type, config_info in visual_detector_configs.items():
-            needs_init = any(b.get("trigger_type") == det_type for b in self.bindings)
-            if needs_init:
-                DetectorClass = config_info['class']
-                if DetectorClass is None or not _imports_ok:
-                    print(f"WARN: Cannot initialize {det_type} detector - class missing or import failed.")
-                    continue
-
-                try:
-                    print(f"Engine: Initializing {DetectorClass.__name__}...")
-                    settings = self.settings.get(config_info['settings_key'], {})
-                    init_kwargs = config_info['defaults'].copy()
-                    default_cam = default_face_cam_idx if det_type == 'face' else default_hand_cam_idx
-                    cam_index = settings.get('camera_index', default_cam)
-                    for key in list(init_kwargs.keys()):
-                        if key in settings:
-                            init_kwargs[key] = settings[key]
-                    # Ensure these args expected by Engine but not Detector are removed
-                    init_kwargs.pop('camera_index', None)
-                    init_kwargs.pop('show_video', None)
-
-                    detector_instance = DetectorClass(event_handler=self.handle_event, **init_kwargs)
-                    self.detectors[det_type] = detector_instance
-
-                    if cam_index not in self.visual_detectors_by_cam:
-                        self.visual_detectors_by_cam[cam_index] = []
-                    self.visual_detectors_by_cam[cam_index].append(detector_instance)
-                    print(f"   - Added {DetectorClass.__name__} to camera index {cam_index}")
-
-                except Exception as e: print(f"ERROR: Init {DetectorClass.__name__} failed: {e}"); traceback.print_exc()
-            else:
-                print(f"Engine: No {det_type} bindings found, {config_info['class'].__name__} not initialized.")
-
-        print(f"Engine: Initialized active detectors: {list(self.detectors.keys())}")
-        print(f"Engine: Camera mapping: { {k: [d.__class__.__name__ for d in v] for k, v in self.visual_detectors_by_cam.items()} }")
-
-    def handle_event(self, detector_type, event_data):
-        if not self.is_running: return
-        print(f"Engine: Event received - Type: '{detector_type}', Data: '{event_data}'")
-        event_key = str(event_data).lower(); action_id_to_execute = None
-        for binding in self.bindings:
-            if binding.get("trigger_type") == detector_type and str(binding.get("trigger_event", "")).lower() == event_key:
-                action_id_to_execute = binding.get("action_id")
-                if action_id_to_execute: print(f"Engine: Found binding -> Action ID '{action_id_to_execute}'"); break
-                else: print(f"WARN: Binding found for '{event_key}', but 'action_id' missing.")
-        if action_id_to_execute:
-            action_func = get_action_function(action_id_to_execute)
-            if action_func:
-                try: print(f"Engine: Executing action '{action_id_to_execute}'..."); action_func()
-                except Exception as e: print(f"ERROR: executing action '{action_id_to_execute}': {e}"); traceback.print_exc()
-            else: print(f"WARN: Action ID '{action_id_to_execute}' not in registry!")
-
-    def _run_main_loop(self):
-        print("Engine: Starting main processing loop...")
-        active_captures = {}
-        try:
-            for cam_index in self.visual_detectors_by_cam.keys():
-                print(f"Engine: Initializing camera {cam_index}...")
-                cap = cv2.VideoCapture(cam_index); time.sleep(0.5)
-                if not cap.isOpened(): print(f"ERROR: Cannot open camera {cam_index}!"); continue
-                active_captures[cam_index] = cap; print(f"Engine: Camera {cam_index} opened.")
-            if not active_captures: print("ERROR: No cameras opened."); self.is_running = False; return
-
-            frame_width, frame_height = {}, {}
-
-            while self.is_running:
-                frames = {}; timestamps = {}
-
-                # Read frames
-                for cam_index, cap in active_captures.items():
-                    if not cap.isOpened(): frames[cam_index]=None; continue
-                    ret, frame = cap.read()
-                    if not ret: print(f"WARN: Frame grab fail cam {cam_index}."); frames[cam_index]=None; continue
-                    if cam_index not in frame_width: frame_height[cam_index], frame_width[cam_index], _ = frame.shape
-                    frames[cam_index] = frame; timestamps[cam_index] = time.time()
-
-                # Process frames
-                vis_results = {}
-                for cam_index, frame in frames.items():
-                    if frame is None: continue
-                    frame_flipped = cv2.flip(frame, 1)
-                    rgb_frame = cv2.cvtColor(frame_flipped, cv2.COLOR_BGR2RGB)
-                    vis_results[cam_index] = {}
-                    for detector in self.visual_detectors_by_cam.get(cam_index, []):
-                        detector_type = next((k for k, v in self.detectors.items() if v == detector), None)
-                        if detector_type and detector.is_active:
-                            try:
-                                vis_data = detector.process_frame(rgb_frame, timestamps[cam_index])
-                                if vis_data: vis_results[cam_index][detector_type] = vis_data
-                            except Exception as process_e: print(f"ERROR: Processing frame with {detector_type} failed: {process_e}"); traceback.print_exc()
-
- # Visualization
-                if self.show_combined_video:
-                    # ... (keep the setup code for display_frame etc.) ...
-                    display_frame = None; display_cam_index = next(iter(active_captures.keys()), None)
-                    if display_cam_index is not None and frames.get(display_cam_index) is not None:
-                        display_frame = cv2.flip(frames[display_cam_index].copy(), 1) # Use flipped frame
-                        h, w, _ = display_frame.shape
-
-                        # Draw Face Results
-                        if self.vis_settings.get('show_face') and 'face' in vis_results.get(display_cam_index, {}):
-                            face_vis = vis_results[display_cam_index]['face']
-                            # --- Use the landmark_object returned by the detector ---
-                            landmark_drawing_object = face_vis.get('landmark_object')
-                            if landmark_drawing_object: # Check if the object exists
-                                mp_drawing.draw_landmarks(
-                                    image=display_frame,
-                                    landmark_list=landmark_drawing_object, # Pass the correct object
-                                    connections=mp_face_mesh.FACEMESH_CONTOURS,
-                                    landmark_drawing_spec=None,
-                                    connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style()
-                                )
-                            # ------------------------------------------------------
-                            # Display text using states and values dictionaries
-                            if face_vis: # Ensure face_vis itself is not None
-                                f_states = face_vis.get('states', {}); f_vals = face_vis.get('values', {})
-                                # Use .get() for values too, providing default if key missing
-                                text = f"F|T:{f_vals.get('head_tilt_angle', 0.0):.0f} M:{f_vals.get('mar', 0.0):.2f} E:{f_vals.get('avg_err', 0.0):.2f}"
-                                cv2.putText(display_frame, text, (10, h-40), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
-                                f_active = [k.split('_')[0] for k,v in f_states.items() if v]; state_text = "Face: "+(",".join(f_active) if f_active else "None")
-                                cv2.putText(display_frame, state_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-
-                        # Draw Hand Results (keep as is, HandDetector returns correct format)
-                        if self.vis_settings.get('show_hand') and 'hand' in vis_results.get(display_cam_index, {}):
-                            hand_vis = vis_results[display_cam_index]['hand']
-                            if hand_vis:
-                                mp_drawing.draw_landmarks(image=display_frame, landmark_list=hand_vis,
-                                     connections=mp_hands.HAND_CONNECTIONS, landmark_drawing_spec=None,
-                                     connection_drawing_spec=mp_drawing_styles.get_default_hand_connections_style())
-                            hand_det = self.detectors.get('hand')
-                            if hand_det: stable_hand = hand_det._current_stable_gesture; cv2.putText(display_frame, f"Hand: {stable_hand}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-
-                        # ... (keep the imshow, waitKey, except blocks as they were) ...
-                        try: cv2.imshow('AccessiCommand Output', display_frame)
-                        except cv2.error as cv_err: print(f"WARN: imshow error: {cv_err}"); self.show_combined_video = False
-
-                    try: # Handle waitKey safely
-                        key = cv2.waitKey(1) & 0xFF
-                        if key == ord('q'): self.is_running = False; break
-                    except cv2.error as key_err: print(f"WARN: waitKey error: {key_err}"); self.show_combined_video = False
-
-                else: # if not self.show_combined_video
-                    time.sleep(0.01) # Prevent CPU hog if no video shown
-
-        except Exception as loop_e: print(f"ERROR in Engine main loop: {loop_e}"); traceback.print_exc()
-        finally:
-             print("Engine: Exiting main processing loop...");
-             for cam_index, cap in active_captures.items():
-                  if cap and cap.isOpened(): cap.release(); print(f"Engine: Camera {cam_index} released.")
-             try: cv2.destroyAllWindows()
-             except Exception: pass
-             self.is_running = False
+        return vis_data
 
 
     def start(self):
-        if self.is_running: print("Engine: Already running."); return
-        print("--- Engine Starting ---"); self.is_running = True
-        if 'voice' in self.detectors:
-            try: print("Engine: Starting voice detector..."); self.detectors['voice'].start()
-            except Exception as e: print(f"ERROR starting voice: {e}")
-        if self.visual_detectors_by_cam:
-             print("Engine: Activating visual detectors...")
-             for detectors_list in self.visual_detectors_by_cam.values():
-                  for detector in detectors_list:
-                       if hasattr(detector, 'start') and callable(detector.start):
-                           try: detector.start()
-                           except Exception as e: print(f"ERROR starting {detector.__class__.__name__}: {e}")
-             print("Engine: Starting main processing loop thread...")
-             self.main_loop_thread = threading.Thread(target=self._run_main_loop, daemon=True)
-             self.main_loop_thread.start()
-        else: print("Engine: No visual detectors to start main loop.")
-        print(f"Engine: Started with active detectors: {list(self.detectors.keys())}")
+        """Initializes MediaPipe models."""
+        if self.is_active: print("Facial Detector: Already active."); return
+        print("Facial Detector: Initializing MediaPipe FaceMesh...")
+        try:
+            # Initialize face mesh here instead of __init__
+            self.face_mesh = mp_face_mesh.FaceMesh(
+                max_num_faces=1, refine_landmarks=True,
+                min_detection_confidence=0.5, min_tracking_confidence=0.5
+            )
+            self._reset_states() # Reset states when starting
+            self.is_active = True
+            print("Facial Detector: Started (ready to process frames).")
+        except Exception as e:
+            print(f"ERROR: Failed to initialize MediaPipe FaceMesh: {e}")
+            self.face_mesh = None # Ensure it's None if init fails
+            self.is_active = False
 
     def stop(self):
-        if not self.is_running and not self.detectors: print("Engine: Already stopped/no detectors."); return
-        print("--- Engine Stopping ---"); self.is_running = False
-        if 'voice' in self.detectors and hasattr(self.detectors['voice'], 'stop'):
-            try: print("Engine: Stopping voice detector..."); self.detectors['voice'].stop()
-            except Exception as e: print(f"ERROR stopping voice: {e}")
-        if self.main_loop_thread and self.main_loop_thread.is_alive():
-            print("Engine: Waiting for main loop thread..."); self.main_loop_thread.join(timeout=2.0)
-            if self.main_loop_thread.is_alive(): print("WARN: Main loop thread didn't stop.")
-        self.main_loop_thread = None
-        print("Engine: Stopping visual detector models...")
-        stop_count = 0
-        for dtype, det_instance in self.detectors.items():
-             if dtype == 'voice': continue
-             try:
-                 if callable(getattr(det_instance, "stop", None)): det_instance.stop(); stop_count += 1
-                 else: print(f"WARN: {dtype} has no stop().")
-             except Exception as e: print(f"ERROR stopping {dtype}: {e}")
-        print(f"Engine: Stopped {stop_count} visual models.")
-        try: cv2.destroyAllWindows(); print("Engine: Closed OpenCV windows.")
-        except Exception: pass
-        self.capture_devices = {}
-        print("Engine: Stop sequence complete.")
-
-
-    def reload_configuration(self):
-        print("--- Reloading Config ---"); self.stop()
-        self._load_configuration(); self._initialize_detectors(); self.start()
-        print("--- Reload Complete ---")
-
-# --- Integration Test Block ---
-if __name__ == '__main__':
-    if not _imports_ok: print("Exiting: Import errors."); sys.exit(1)
-    print("--- Running Engine Directly (Integration Test) ---")
-    current_script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(current_script_dir))
-    config_file_path = os.path.join(project_root, "config.json")
-    print(f"Using config file: {config_file_path}")
-    if not os.path.exists(config_file_path): print(f"ERROR: Config file not found!"); sys.exit(1)
-
-    engine = Engine(config_path=config_file_path)
-    engine.start()
-
-    if not engine.detectors: print("\nWARN: No detectors initialized.")
-    else: print(f"\nEngine running: {list(engine.detectors.keys())}. Perform actions...")
-    print("Press Ctrl+C in terminal to stop.")
-    try:
-        # Keep main thread alive
-        if engine.main_loop_thread:
-             while engine.main_loop_thread.is_alive():
-                 engine.main_loop_thread.join(timeout=0.5)
-        else: # Keep alive for voice only if no visual loop started
-             while engine.is_running: time.sleep(1)
-    except KeyboardInterrupt: print("\nCtrl+C detected. Stopping engine...")
-    except Exception as main_e: print(f"\nERROR in main test loop: {main_e}"); traceback.print_exc()
-    finally: engine.stop(); print("--- Engine Test Finished ---")
+        """Releases MediaPipe resources."""
+        if not self.is_active: print("Facial Detector: Already stopped."); return
+        print("Facial Detector: Stopping...")
+        self.is_active = False
+        if hasattr(self.face_mesh, 'close'):
+             try: self.face_mesh.close()
+             except Exception as e: print(f"Error closing face_mesh: {e}")
+        self.face_mesh = None # Release reference
+        print("Facial Detector: Stopped.")

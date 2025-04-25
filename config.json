@@ -1,4 +1,3 @@
-
 {
     "bindings": [
         { "trigger_type": "voice", "trigger_event": "record", "action_id": "PRESS_SPACE" },
