@@ -59,7 +59,8 @@ keys_currently_pressed = set()  # Track which keys are currently being pressed
 # --- Thresholds ---
 EAR_THRESHOLD = 0.20
 MAR_THRESHOLD = 0.35
-ERR_THRESHOLD = 1.4  # Eyebrow Raise Ratio threshold (adjust based on testing)
+ERR_THRESHOLD = 1.34jDAj  # Eyebrow Raise Ratio threshold (adjust based on testing)
+BOTH_EYES_CLOSED_FRAMES = 2  # Number of consecutive frames to detect both eyes closed
 
 # New head tilt thresholds
 HEAD_TILT_LEFT_MIN = -100  # Start pressing 'A' when angle is below -100
@@ -80,6 +81,7 @@ mouth_open_counter = 0
 eyebrow_raise_counter = 0
 head_tilt_left_counter = 0
 head_tilt_right_counter = 0
+both_eyes_closed_counter = 0  # Counter for both eyes closed
 
 def calculate_distance(p1, p2):
     return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
@@ -228,7 +230,8 @@ try:
             'a': False,
             'd': False,
             'j': False,
-            'space': False
+            'k': False,  # Changed from 'space' to 'k' for mouth open
+            'space': False  # Added for both eyes closed
         }
         
         # Reset blink flags
@@ -280,7 +283,7 @@ try:
             elif right_eye_blinked and not left_eye_blinked:
                 perform_shift_key_combo('d')
 
-            # Mouth open detection
+            # Mouth open detection (press 'k')
             mar_val = calculate_mar(landmarks, MOUTH_CORNER_INDICES, MOUTH_VERTICAL_INDICES)
 
             if mar_val > MAR_THRESHOLD:
@@ -290,6 +293,16 @@ try:
 
             mouth_open_state = mouth_open_counter >= CONSEC_FRAMES_MOUTH
             if mouth_open_state:
+                actions['k'] = True  # Changed from 'space' to 'k'
+
+            # Both eyes closed detection (press 'space')
+            if ear_left_val < EAR_THRESHOLD and ear_right_val < EAR_THRESHOLD:
+                both_eyes_closed_counter += 1
+            else:
+                both_eyes_closed_counter = max(0, both_eyes_closed_counter - 1)
+
+            both_eyes_closed_state = both_eyes_closed_counter >= BOTH_EYES_CLOSED_FRAMES
+            if both_eyes_closed_state:
                 actions['space'] = True
 
             # Eyebrow raise detection
@@ -362,6 +375,7 @@ try:
         eyebrow_color = (0, 0, 255) if eyebrows_raised_state else (0, 255, 0)
         head_tilt_left_color = (0, 0, 255) if head_tilt_left_state else (0, 255, 0)
         head_tilt_right_color = (0, 0, 255) if head_tilt_right_state else (0, 255, 0)
+        both_eyes_color = (0, 0, 255) if both_eyes_closed_state else (0, 255, 0)
 
         cv2.putText(frame, f"L EYE: {ear_left_val:.2f} ({'Closed' if left_eye_closed_state else 'Open'})", (10, 30),
                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, left_eye_color, 2)
@@ -373,22 +387,24 @@ try:
                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, eyebrow_color, 2)
         cv2.putText(frame, f"Head Tilt: {head_tilt_angle:.1f}° ({'Left' if head_tilt_left_state else 'Right' if head_tilt_right_state else 'Center'})", (10, 150),
                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, head_tilt_left_color if head_tilt_left_state else head_tilt_right_color if head_tilt_right_state else (0, 255, 0), 2)
+        cv2.putText(frame, f"Both Eyes: {'Closed' if both_eyes_closed_state else 'Open'}", (10, 180),
+                  cv2.FONT_HERSHEY_SIMPLEX, 0.6, both_eyes_color, 2)
         
         # Display active keys
         active_keys_text = "Active Keys: " + ", ".join(keys_currently_pressed) if keys_currently_pressed else "No keys active"
-        cv2.putText(frame, active_keys_text, (10, 180),
+        cv2.putText(frame, active_keys_text, (10, 210),
                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
         # Display blink feedback
         if current_time - last_left_blink_time < 0.5:
-            cv2.putText(frame, "Left eye blink: 'shift+a' pressed", (10, 210),
+            cv2.putText(frame, "Left eye blink: 'shift+a' pressed", (10, 240),
                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 215, 0), 2)
         if current_time - last_right_blink_time < 0.5:
-            cv2.putText(frame, "Right eye blink: 'shift+d' pressed", (10, 240),
+            cv2.putText(frame, "Right eye blink: 'shift+d' pressed", (10, 270),
                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 215, 0), 2)
 
         # Display thresholds for reference
-        cv2.putText(frame, f"Head Tilt Left: {HEAD_TILT_LEFT_MIN}° to {HEAD_TILT_LEFT_MAX}° | Right: {HEAD_TILT_RIGHT_MIN}° to {HEAD_TILT_RIGHT_MAX}°", (10, 270),
+        cv2.putText(frame, f"Head Tilt Left: {HEAD_TILT_LEFT_MIN}° to {HEAD_TILT_LEFT_MAX}° | Right: {HEAD_TILT_RIGHT_MIN}° to {HEAD_TILT_RIGHT_MAX}°", (10, 300),
                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
         cv2.imshow('Facial Gesture Controller', frame)
