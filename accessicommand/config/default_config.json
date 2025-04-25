@@ -1,0 +1,45 @@
+{
+    "bindings": [
+        {
+            "trigger_type": "voice",
+            "trigger_event": "record",
+            "action_id": "PRESS_SPACE"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "next",
+            "action_id": "PRESS_DOWN"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "back",
+            "action_id": "PRESS_LEFT"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "go",
+            "action_id": "PRESS_RIGHT"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "select",
+            "action_id": "PRESS_ENTER"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "stop",
+            "action_id": "PRESS_ESC"
+        }
+    ],
+    "settings": {
+        "voice_detector": {
+            "pause_threshold": 0.4,
+            "energy_threshold": 350
+        },
+        "facial_detector": {
+            "ear_threshold": 0.20,
+            "mar_threshold": 0.35,
+            "camera_index": 0
+        }
+    }
+}
