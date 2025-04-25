@@ -333,8 +333,10 @@ if __name__ == '__main__':
     print(f"Using config file: {config_file_path}")
     if not os.path.exists(config_file_path): print(f"ERROR: Config file not found!"); sys.exit(1)
 
+
     engine = Engine(config_path=config_file_path)
     engine.start()
+
 
     if not engine.detectors: print("\nWARN: No detectors initialized.")
     else: print(f"\nEngine running: {list(engine.detectors.keys())}. Perform actions...")
