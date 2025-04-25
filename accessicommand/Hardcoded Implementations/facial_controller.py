@@ -59,7 +59,7 @@ keys_currently_pressed = set()  # Track which keys are currently being pressed
 # --- Thresholds ---
 EAR_THRESHOLD = 0.20
 MAR_THRESHOLD = 0.35
-ERR_THRESHOLD = 1.34jDAj  # Eyebrow Raise Ratio threshold (adjust based on testing)
+ERR_THRESHOLD = 1.34  # Eyebrow Raise Ratio threshold (adjust based on testing)
 BOTH_EYES_CLOSED_FRAMES = 2  # Number of consecutive frames to detect both eyes closed
 
 # New head tilt thresholds
