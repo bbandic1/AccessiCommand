@@ -13,7 +13,18 @@ ACTION_REGISTRY = {
     "PRESS_RIGHT": lambda: system_actions.press_key('right'),
     "PRESS_UP": lambda: system_actions.press_key('up'),
     "PRESS_DOWN": lambda: system_actions.press_key('down'),
-    "PRESS_A": lambda: system_actions.press_key('a'), # Example letter
+    "PRESS_W": lambda: system_actions.press_key('w'),          # Move forward
+    "PRESS_A": lambda: system_actions.press_key('a'),          # Move left
+    "PRESS_S": lambda: system_actions.press_key('s'),          # Move backward
+    "PRESS_D": lambda: system_actions.press_key('d'),          # Move right
+    "PRESS_Q": lambda: system_actions.press_key('q'),          # Secondary action
+    "PRESS_E": lambda: system_actions.press_key('e'),          # Interact
+    "PRESS_R": lambda: system_actions.press_key('r'),          # Reload
+    "PRESS_F": lambda: system_actions.press_key('f'),          # Use or interact
+    "PRESS_SHIFT": lambda: system_actions.press_key('shift'),  # Sprint
+    "PRESS_CTRL": lambda: system_actions.press_key('ctrl'),    # Crouch
+    "PRESS_TAB": lambda: system_actions.press_key('tab'),      # Inventory or map
+
     "PRESS_CTRL_ALT_DEL": lambda: system_actions.hotkey('ctrl', 'alt', 'delete'),
     "PRESS_ALT_F4": lambda: system_actions.hotkey('alt', 'f4'),
     # Add more common keys and shortcuts
@@ -21,6 +32,7 @@ ACTION_REGISTRY = {
     # Mouse Actions
     "MOUSE_CLICK_LEFT": lambda: system_actions.mouse_click(button='left'),
     "MOUSE_CLICK_RIGHT": lambda: system_actions.mouse_click(button='right'),
+    "MOUSE_CLICK_MIDDLE": lambda: system_actions.mouse_click(button='middle'),  # Middle mouse click
     "MOUSE_DBL_CLICK_LEFT": lambda: system_actions.mouse_click(button='left', clicks=2),
     # Add more specific actions (move up, down, etc.) if needed
 

@@ -62,3 +62,39 @@ def mouse_click(button='left', clicks=1, interval=0.1):
         print(f"[Action Error] Failed to click mouse: {e}")
 
 # --- Add other actions like scroll, drag, etc. ---
+
+def scroll_mouse(amount):
+    """Scrolls the mouse wheel."""
+    try:
+        print(f"[Action] Scrolling mouse by {amount}")
+        pyautogui.scroll(amount)
+    except Exception as e:
+        print(f"[Action Error] Failed to scroll mouse: {e}")
+
+def drag_mouse_to(x, y, duration=0.5):
+    """Drags the mouse to a specific position."""
+    try:
+        print(f"[Action] Dragging mouse to ({x}, {y})")
+        pyautogui.dragTo(x, y, duration=duration)
+    except Exception as e:
+        print(f"[Action Error] Failed to drag mouse: {e}")
+
+def take_screenshot(file_path='screenshot.png'):
+    """Takes a screenshot and saves it to the specified file path."""
+    try:
+        print(f"[Action] Taking screenshot and saving to {file_path}")
+        pyautogui.screenshot(file_path)
+    except Exception as e:
+        print(f"[Action Error] Failed to take screenshot: {e}")
+
+def get_mouse_position():
+    """Returns the current position of the mouse."""
+    try:
+        position = pyautogui.position()
+        print(f"[Action] Current mouse position: {position}")
+        return position
+    except Exception as e:
+        print(f"[Action Error] Failed to get mouse position: {e}")
+        return None
+    
+    # ---Add Emergency Shutdown Action for Safety---
