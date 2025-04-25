@@ -22,6 +22,7 @@ class VoiceListener:
                 "go": lambda: pyautogui.press('right'),
                 "select": lambda: pyautogui.press('enter'),
                 "stop": lambda: pyautogui.press('esc'),
+                
             }
         else:
             self.trigger_actions = action_map
@@ -29,7 +30,7 @@ class VoiceListener:
         print("Voice Listener: Adjusting for ambient noise...")
         with self.microphone as source:
             try:
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
+                self.recognizer.adjust_for_ambient_noise(source, duration=1) 
             except Exception as e:
                 print(f"Error adjusting for ambient noise: {e}. Using default threshold.")
         print(f"Voice Listener: Ready. Adjusted energy threshold: {self.recognizer.energy_threshold:.2f}")

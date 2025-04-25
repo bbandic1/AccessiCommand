@@ -42,6 +42,7 @@ eyebrows_raised_state = False
 head_tilt_left_state = False
 head_tilt_right_state = False
 
+
 # --- Blink detection variables ---
 left_eye_blinked = False
 right_eye_blinked = False
@@ -53,6 +54,7 @@ last_right_blink_time = 0
 
 # --- Key tracking variables ---
 keys_currently_pressed = set()  # Track which keys are currently being pressed
+
 
 # --- Thresholds ---
 EAR_THRESHOLD = 0.20
@@ -69,6 +71,7 @@ CONSEC_FRAMES_BLINK = 2
 CONSEC_FRAMES_MOUTH = 3
 CONSEC_FRAMES_EYEBROW = 3  # Number of consecutive frames for eyebrow raise detection
 CONSEC_FRAMES_HEAD_TILT = 2  # Number of consecutive frames for head tilt detection (reduced for responsiveness)
+
 
 # --- Counters ---
 left_blink_counter = 0
@@ -337,6 +340,7 @@ try:
                     pass
 
             # Draw head tilt line
+
             try:
                 chin = landmarks[152]
                 forehead = landmarks[10]
