@@ -22,6 +22,7 @@ class VoiceListener:
                 "go": lambda: pyautogui.press('right'),
                 "select": lambda: pyautogui.press('enter'),
                 "stop": lambda: pyautogui.press('esc'),
+                
             }
         else:
             self.trigger_actions = action_map
