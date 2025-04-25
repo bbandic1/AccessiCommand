@@ -3,6 +3,7 @@ import mediapipe as mp
 import pyautogui
 import time
 import math
+import numpy as np
 
 # --- MediaPipe Face Mesh Setup ---
 mp_face_mesh = mp.solutions.face_mesh
@@ -28,6 +29,7 @@ MOUTH_CORNER_INDICES = [61, 291]                   # Person's Mouth Corners
 MOUTH_VERTICAL_INDICES = [13, 14]                 # Person's Inner Lips Vertical
 LEFT_EYEBROW_INDICES = [70, 63, 105, 66, 107]    # Person's Left Eyebrow
 RIGHT_EYEBROW_INDICES = [336, 296, 334, 293, 300] # Person's Right Eyebrow
+FACE_OVAL_INDICES = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109]  # Face oval indices for head tilt detection
 
 # Combine all indices we want to draw
 LANDMARKS_TO_DRAW = LEFT_EYE_INDICES + RIGHT_EYE_INDICES + MOUTH_CORNER_INDICES + MOUTH_VERTICAL_INDICES + LEFT_EYEBROW_INDICES + RIGHT_EYEBROW_INDICES
@@ -37,23 +39,30 @@ left_eye_closed_state = False
 right_eye_closed_state = False
 mouth_open_state = False
 eyebrows_raised_state = False
+head_tilt_left_state = False
+head_tilt_right_state = False
 last_action_time = 0
 action_delay = 0.5
 key_held = None  # To track which key is currently being held down
+shift_held = False  # To track if shift is being held down
 
 # --- Thresholds ---
 EAR_THRESHOLD = 0.20
 MAR_THRESHOLD = 0.35
 ERR_THRESHOLD = 1.4  # Eyebrow Raise Ratio threshold (adjust based on testing)
+HEAD_TILT_THRESHOLD = 30  # Degrees threshold for head tilt detection
 CONSEC_FRAMES_BLINK = 2
 CONSEC_FRAMES_MOUTH = 3
 CONSEC_FRAMES_EYEBROW = 3  # Number of consecutive frames for eyebrow raise detection
+CONSEC_FRAMES_HEAD_TILT = 5  # Number of consecutive frames for head tilt detection
 
 # --- Counters ---
 left_blink_counter = 0
 right_blink_counter = 0
 mouth_open_counter = 0
 eyebrow_raise_counter = 0
+head_tilt_left_counter = 0
+head_tilt_right_counter = 0
 
 def calculate_distance(p1, p2):
     return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
@@ -105,14 +114,41 @@ def calculate_err(landmarks, eyebrow_indices, eye_indices):
     except IndexError:
         return 0
 
+def calculate_head_tilt(landmarks, frame_width, frame_height):
+    """Calculate head tilt angle in degrees"""
+    try:
+        # Get face oval points (chin and forehead)
+        chin = landmarks[152]
+        forehead = landmarks[10]
+        
+        # Convert to pixel coordinates
+        chin_x = int(chin.x * frame_width)
+        chin_y = int(chin.y * frame_height)
+        forehead_x = int(forehead.x * frame_width)
+        forehead_y = int(forehead.y * frame_height)
+        
+        # Calculate the angle between vertical line and face line
+        dx = forehead_x - chin_x
+        dy = forehead_y - chin_y
+        angle = math.degrees(math.atan2(dx, dy))
+        
+        return angle
+    except IndexError:
+        return 0
+
 def release_key():
-    global key_held
+    global key_held, shift_held
     if key_held is not None:
         pyautogui.keyUp(key_held)
         key_held = None
+    if shift_held:
+        pyautogui.keyUp('shift')
+        shift_held = False
 
 print("Starting Facial Controller. Press 'q' to quit.")
 print("Hold eye closed to keep key pressed.")
+print("Tilt head left/right for 'a'/'d' keys.")
+print("Blink left/right eye for 'shift+a'/'shift+d'.")
 
 while True:
     ret, frame = cap.read()
@@ -136,6 +172,7 @@ while True:
     mar_val = 0.0
     err_left_val = 0.0
     err_right_val = 0.0
+    head_tilt_angle = 0.0
 
     if results.multi_face_landmarks:
         landmarks = results.multi_face_landmarks[0].landmark
@@ -180,25 +217,59 @@ while True:
 
         eyebrows_raised_state = eyebrow_raise_counter >= CONSEC_FRAMES_EYEBROW
 
+        # Calculate head tilt
+        head_tilt_angle = calculate_head_tilt(landmarks, frame_width, frame_height)
+        
+        if head_tilt_angle < -HEAD_TILT_THRESHOLD:
+            head_tilt_left_counter += 1
+            head_tilt_right_counter = max(0, head_tilt_right_counter - 1)
+        elif head_tilt_angle > HEAD_TILT_THRESHOLD:
+            head_tilt_right_counter += 1
+            head_tilt_left_counter = max(0, head_tilt_left_counter - 1)
+        else:
+            head_tilt_left_counter = max(0, head_tilt_left_counter - 1)
+            head_tilt_right_counter = max(0, head_tilt_right_counter - 1)
+        
+        head_tilt_left_state = head_tilt_left_counter >= CONSEC_FRAMES_HEAD_TILT
+        head_tilt_right_state = head_tilt_right_counter >= CONSEC_FRAMES_HEAD_TILT
+
         # Key press/hold logic
-        if left_eye_closed_state and not right_eye_closed_state:
+        if head_tilt_left_state and not head_tilt_right_state:
             if key_held != 'a':
                 release_key()
                 pyautogui.keyDown('a')
                 key_held = 'a'
-                print("Holding 'a' key")
-        elif right_eye_closed_state and not left_eye_closed_state:
+                print("Holding 'a' key (head tilt)")
+        elif head_tilt_right_state and not head_tilt_left_state:
             if key_held != 'd':
                 release_key()
                 pyautogui.keyDown('d')
                 key_held = 'd'
-                print("Holding 'd' key")
+                print("Holding 'd' key (head tilt)")
+        elif left_eye_closed_state and not right_eye_closed_state:
+            if key_held != 'a' or not shift_held:
+                release_key()
+                pyautogui.keyDown('shift')
+                pyautogui.keyDown('a')
+                key_held = 'a'
+                shift_held = True
+                print("Holding 'shift+a' keys")
+        elif right_eye_closed_state and not left_eye_closed_state:
+            if key_held != 'd' or not shift_held:
+                release_key()
+                pyautogui.keyDown('shift')
+                pyautogui.keyDown('d')
+                key_held = 'd'
+                shift_held = True
+                print("Holding 'shift+d' keys")
         elif eyebrows_raised_state:
+            if key_held != 'j':
                 release_key()
                 pyautogui.keyDown('j')
                 key_held = 'j'
                 print("Holding 'j' key")
-        elif left_eye_closed_state or right_eye_closed_state:
+        elif left_eye_closed_state and right_eye_closed_state:
+            if key_held != 'k':
                 release_key()
                 pyautogui.keyDown('k')
                 key_held = 'k'
@@ -222,11 +293,25 @@ while True:
             except IndexError:
                 pass
 
+        # Draw head tilt line
+        try:
+            chin = landmarks[152]
+            forehead = landmarks[10]
+            chin_x = int(chin.x * frame_width)
+            chin_y = int(chin.y * frame_height)
+            forehead_x = int(forehead.x * frame_width)
+            forehead_y = int(forehead.y * frame_height)
+            cv2.line(frame, (chin_x, chin_y), (forehead_x, forehead_y), (255, 0, 0), 2)
+        except IndexError:
+            pass
+
     # Display status
     left_eye_color = (0, 0, 255) if left_eye_closed_state else (0, 255, 0)
     right_eye_color = (0, 0, 255) if right_eye_closed_state else (0, 255, 0)
     mouth_color = (0, 0, 255) if mouth_open_state else (0, 255, 0)
     eyebrow_color = (0, 0, 255) if eyebrows_raised_state else (0, 255, 0)
+    head_tilt_left_color = (0, 0, 255) if head_tilt_left_state else (0, 255, 0)
+    head_tilt_right_color = (0, 0, 255) if head_tilt_right_state else (0, 255, 0)
 
     cv2.putText(frame, f"L EYE: {ear_left_val:.2f} ({'Closed' if left_eye_closed_state else 'Open'})", (10, 30),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, left_eye_color, 2)
@@ -236,8 +321,10 @@ while True:
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, mouth_color, 2)
     cv2.putText(frame, f"ERR: {avg_err:.2f} ({'Raised' if eyebrows_raised_state else 'Normal'})", (10, 120),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, eyebrow_color, 2)
+    cv2.putText(frame, f"Head Tilt: {head_tilt_angle:.1f}° ({'Left' if head_tilt_left_state else 'Right' if head_tilt_right_state else 'Center'})", (10, 150),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, head_tilt_left_color if head_tilt_left_state else head_tilt_right_color if head_tilt_right_state else (0, 255, 0), 2)
     if key_held:
-        cv2.putText(frame, f"Holding: {key_held}", (10, 150),
+        cv2.putText(frame, f"Holding: {('shift+' if shift_held else '') + key_held}", (10, 180),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     cv2.imshow('Facial Gesture Controller', frame)
