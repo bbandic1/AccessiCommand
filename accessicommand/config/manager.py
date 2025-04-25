@@ -1,4 +1,3 @@
-# accessicommand/config/manager.py
 import json
 import os
 import traceback
@@ -37,15 +36,14 @@ class ConfigManager:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     self.config_data = json.load(f)
                 print(f"ConfigManager: Configuration loaded from '{self.config_path}'")
-                # Optional: Validate structure or merge with defaults if keys are missing
             except json.JSONDecodeError:
                 print(f"ERROR: Invalid JSON in '{self.config_path}'. Using default config.")
                 self.config_data = DEFAULT_CONFIG.copy()
-                self._save_config() # Save the default one to fix the file
+                self._save_config() 
             except Exception as e:
                 print(f"ERROR: Failed to load config file '{self.config_path}': {e}")
                 traceback.print_exc()
-                self.config_data = DEFAULT_CONFIG.copy() # Use default on other errors
+                self.config_data = DEFAULT_CONFIG.copy() #
         else:
             print(f"ConfigManager: Config file not found at '{self.config_path}'. Creating default.")
             self.config_data = DEFAULT_CONFIG.copy()
