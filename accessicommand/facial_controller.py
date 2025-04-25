@@ -175,8 +175,7 @@ while True:
                 pass
 
 
-    # --- Display Status Text ---
-        # --- Display Status Text ---
+    # --- Display Status Text ----
     # Determine colors based on state
     left_eye_color = (0, 0, 255) if left_eye_closed_state else (0, 255, 0)  # Red if closed, Green if open
     right_eye_color = (0, 0, 255) if right_eye_closed_state else (0, 255, 0) # Red if closed, Green if open
