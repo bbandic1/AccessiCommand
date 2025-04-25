@@ -175,6 +175,7 @@ def update_keys(actions_to_perform):
 
 def perform_shift_key_combo(key):
     """Perform a single shift+key press and release"""
+    pyautogui.keyDown(key)
     pyautogui.keyDown('shift')
     pyautogui.keyDown(key)
     time.sleep(0.05)  # Small delay to ensure the key combination is registered
