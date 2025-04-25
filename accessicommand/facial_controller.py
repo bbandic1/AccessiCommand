@@ -3,136 +3,207 @@ import mediapipe as mp
 import pyautogui
 import time
 import math
-import numpy as np
 
-# Inicijalizacija MediaPipe Face Mesh
+# --- MediaPipe Face Mesh Setup ---
+# Removed mp_drawing and mp_drawing_styles as we'll draw manually
 mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True)
 
-# Inicijalizacija kamere
+face_mesh = mp_face_mesh.FaceMesh(
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5)
+
+# --- Camera and Screen Setup ---
 cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("Error: Cannot open camera")
+    exit()
 
-# Landmarkovi
-LEFT_EYE_LANDMARKS = [362, 385, 387, 263, 373, 380]
-RIGHT_EYE_LANDMARKS = [33, 160, 158, 133, 153, 144]
-LIPS_LANDMARKS = [61, 291, 0, 17]  # Gornja i donja usna
-MOUTH_INNER_LANDMARKS = [78, 306, 13, 14]  # Unutrašnjost usta
+screen_w, screen_h = pyautogui.size()
 
-# Promenljive za praćenje stanja
-left_eye_closed = False
-right_eye_closed = False
-mouth_open = False
+# --- Landmark Indices ---
+LEFT_EYE_INDICES = [362, 385, 387, 263, 373, 380] # Person's Left Eye
+RIGHT_EYE_INDICES = [33, 160, 158, 133, 153, 144]  # Person's Right Eye
+MOUTH_CORNER_INDICES = [61, 291]                   # Person's Mouth Corners
+MOUTH_VERTICAL_INDICES = [13, 14]                 # Person's Inner Lips Vertical
+
+# Combine all indices we want to draw
+LANDMARKS_TO_DRAW = LEFT_EYE_INDICES + RIGHT_EYE_INDICES + MOUTH_CORNER_INDICES + MOUTH_VERTICAL_INDICES
+
+# --- State Variables ---
+left_eye_closed_state = False
+right_eye_closed_state = False
+mouth_open_state = False
 last_action_time = 0
 action_delay = 0.5
 
-# Pragovi (podesite po potrebi)
-EAR_THRESHOLD = 0.22
-MOUTH_RATIO_THRESHOLD = 2.0  # Veći broj = otvorenija usta
-CONSEC_FRAMES = 3
+# --- Thresholds ---
+EAR_THRESHOLD = 0.20
+MAR_THRESHOLD = 0.35
+CONSEC_FRAMES_BLINK = 2
+CONSEC_FRAMES_MOUTH = 3
 
-# Brojači
+# --- Counters ---
+left_blink_counter = 0
+right_blink_counter = 0
 mouth_open_counter = 0
 
-def calculate_ear(eye_points):
-    # Izračun EAR za oko
-    A = math.dist((eye_points[1].x, eye_points[1].y), (eye_points[5].x, eye_points[5].y))
-    B = math.dist((eye_points[2].x, eye_points[2].y), (eye_points[4].x, eye_points[4].y))
-    C = math.dist((eye_points[0].x, eye_points[0].y), (eye_points[3].x, eye_points[3].y))
-    ear = (A + B) / (2.0 * C)
-    return ear
+def calculate_distance(p1, p2):
+    return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
 
-def calculate_mouth_open(outer_mouth, inner_mouth):
-    # Izračunaj udaljenost između gornje i donje usne (spolja)
-    outer_vertical = math.dist((outer_mouth[0].x, outer_mouth[0].y), 
-                             (outer_mouth[1].x, outer_mouth[1].y))
-    
-    # Izračunaj udaljenost između gornje i donje usne (iznutra)
-    inner_vertical = math.dist((inner_mouth[0].x, inner_mouth[0].y), 
-                             (inner_mouth[1].x, inner_mouth[1].y))
-    
-    # Izračunaj horizontalnu udaljenost (širina usta)
-    horizontal = math.dist((outer_mouth[2].x, outer_mouth[2].y), 
-                          (outer_mouth[3].x, outer_mouth[3].y))
-    
-    # Omjer vertikalne i horizontalne udaljenosti
-    mouth_ratio = (outer_vertical + inner_vertical) / (2 * horizontal)
-    return mouth_ratio
+def calculate_ear(eye_landmarks):
+    try:
+        v1 = calculate_distance(eye_landmarks[1], eye_landmarks[5])
+        v2 = calculate_distance(eye_landmarks[2], eye_landmarks[4])
+        h = calculate_distance(eye_landmarks[0], eye_landmarks[3])
+        if h == 0: return 1.0
+        ear = (v1 + v2) / (2.0 * h)
+        return ear
+    except IndexError:
+        # print("Warning: Index error calculating EAR") # Keep console less noisy
+        return 1.0
+
+def calculate_mar(landmarks, corner_indices, inner_vertical_indices):
+    try:
+        mouth_left_corner = landmarks[corner_indices[0]]
+        mouth_right_corner = landmarks[corner_indices[1]]
+        lip_upper_inner = landmarks[inner_vertical_indices[0]]
+        lip_lower_inner = landmarks[inner_vertical_indices[1]]
+        vertical_dist = calculate_distance(lip_upper_inner, lip_lower_inner)
+        horizontal_dist = calculate_distance(mouth_left_corner, mouth_right_corner)
+        if horizontal_dist == 0: return 0
+        mar = vertical_dist / horizontal_dist
+        return mar
+    except IndexError:
+        # print("Warning: Index error calculating MAR") # Keep console less noisy
+        return 0
+
+print("Starting Facial Controller. Press 'q' to quit.")
+print(f"Screen Size: {screen_w}x{screen_h}")
+print("Ensure the application you want to control is active.")
+print(f"Settings: EAR Threshold={EAR_THRESHOLD}, MAR Threshold={MAR_THRESHOLD}, Delay={action_delay}s")
+print("--- TUNING REQUIRED FOR THRESHOLDS! ---")
 
 while True:
     ret, frame = cap.read()
     if not ret:
-        break
-    
-    # Flip slike za prirodniji izgled
+        print("Failed to grab frame")
+        time.sleep(0.5)
+        continue
+
     frame = cv2.flip(frame, 1)
+    frame_height, frame_width, _ = frame.shape
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    rgb_frame.flags.writeable = False
     results = face_mesh.process(rgb_frame)
-    
+    rgb_frame.flags.writeable = True
+
+    frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR) # Convert back for drawing
+
+    ear_left_val = 1.0
+    ear_right_val = 1.0
+    mar_val = 0.0
+
     if results.multi_face_landmarks:
         landmarks = results.multi_face_landmarks[0].landmark
-        
-        # Oči
-        left_eye_points = [landmarks[i] for i in LEFT_EYE_LANDMARKS]
-        right_eye_points = [landmarks[i] for i in RIGHT_EYE_LANDMARKS]
-        left_ear = calculate_ear(left_eye_points)
-        right_ear = calculate_ear(right_eye_points)
-        
-        # Usta - koristimo i spoljašnje i unutrašnje landmarkove
-        outer_mouth = [landmarks[i] for i in LIPS_LANDMARKS]
-        inner_mouth = [landmarks[i] for i in MOUTH_INNER_LANDMARKS]
-        mouth_ratio = calculate_mouth_open(outer_mouth, inner_mouth)
-        
-        # Detekcija otvorenih usta sa histerezom
-        if mouth_ratio > MOUTH_RATIO_THRESHOLD:
+
+        # Use the actual landmark indices directly from the constants
+        person_right_eye_points = [landmarks[i] for i in LEFT_EYE_INDICES] # Eye on left of screen
+        person_left_eye_points = [landmarks[i] for i in RIGHT_EYE_INDICES] # Eye on right of screen
+
+        ear_left_val = calculate_ear(person_left_eye_points)
+        ear_right_val = calculate_ear(person_right_eye_points)
+
+        if ear_right_val < EAR_THRESHOLD:
+            right_blink_counter += 1
+        else:
+            right_blink_counter = 0
+
+        if ear_left_val < EAR_THRESHOLD:
+            left_blink_counter += 1
+        else:
+            left_blink_counter = 0
+
+        right_eye_closed_state = right_blink_counter >= CONSEC_FRAMES_BLINK
+        left_eye_closed_state = left_blink_counter >= CONSEC_FRAMES_BLINK
+
+        mar_val = calculate_mar(landmarks, MOUTH_CORNER_INDICES, MOUTH_VERTICAL_INDICES)
+
+        if mar_val > MAR_THRESHOLD:
             mouth_open_counter += 1
         else:
             mouth_open_counter = max(0, mouth_open_counter - 1)
-        
-        mouth_open = mouth_open_counter >= CONSEC_FRAMES
-        
-        # Detekcija treptaja oka
-        left_eye_closed = left_ear < EAR_THRESHOLD
-        right_eye_closed = right_ear < EAR_THRESHOLD
-        
-        # Prikaz informacija
-        cv2.putText(frame, f"Mouth Ratio: {mouth_ratio:.2f}", (10, 90), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(frame, f"Mouth Open: {mouth_open}", (10, 120), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        # Akcije
+
+        mouth_open_state = mouth_open_counter >= CONSEC_FRAMES_MOUTH
+
         current_time = time.time()
         if current_time - last_action_time > action_delay:
-            if left_eye_closed and not right_eye_closed:
+            action_taken = False
+            if left_eye_closed_state and not right_eye_closed_state:
                 pyautogui.press('left')
-                print("LEFT")
-                last_action_time = current_time
-            elif right_eye_closed and not left_eye_closed:
+                print(f"ACTION @ {current_time:.2f}: Left Wink -> LEFT")
+                action_taken = True
+            elif right_eye_closed_state and not left_eye_closed_state:
                 pyautogui.press('right')
-                print("RIGHT")
-                last_action_time = current_time
-            elif left_eye_closed and right_eye_closed:
+                print(f"ACTION @ {current_time:.2f}: Right Wink -> RIGHT")
+                action_taken = True
+            elif left_eye_closed_state and right_eye_closed_state:
                 pyautogui.press('space')
-                print("SPACE")
-                last_action_time = current_time
-            elif mouth_open:
+                print(f"ACTION @ {current_time:.2f}: Blink -> SPACE")
+                action_taken = True
+            elif mouth_open_state:
                 pyautogui.press('down')
-                print("MOUTH OPEN")
-                last_action_time = current_time
-        
-        # Vizuelizacija
-        for landmark in LEFT_EYE_LANDMARKS + RIGHT_EYE_LANDMARKS + LIPS_LANDMARKS + MOUTH_INNER_LANDMARKS:
-            point = landmarks[landmark]
-            x = int(point.x * frame.shape[1])
-            y = int(point.y * frame.shape[0])
-            color = (0, 255, 0)  # Zelena za normalno stanje
-            if landmark in MOUTH_INNER_LANDMARKS and mouth_open:
-                color = (0, 0, 255)  # Crvena kada su usta otvorena
-            cv2.circle(frame, (x, y), 2, color, -1)
-    
-    cv2.imshow('Face Controls', frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+                print(f"ACTION @ {current_time:.2f}: Mouth Open -> DOWN")
+                action_taken = True
 
+            if action_taken:
+                last_action_time = current_time
+
+        # --- Visualization: Draw circles on specific landmarks ---
+        for index in LANDMARKS_TO_DRAW:
+            try:
+                point = landmarks[index]
+                # Denormalize coordinates
+                x = int(point.x * frame_width)
+                y = int(point.y * frame_height)
+                # Draw a small green circle
+                cv2.circle(frame, (x, y), 2, (0, 255, 0), -1) # -1 fills the circle
+            except IndexError:
+                 # This shouldn't happen if landmarks were detected, but good practice
+                pass
+
+
+    # --- Display Status Text ---
+        # --- Display Status Text ---
+    # Determine colors based on state
+    left_eye_color = (0, 0, 255) if left_eye_closed_state else (0, 255, 0)  # Red if closed, Green if open
+    right_eye_color = (0, 0, 255) if right_eye_closed_state else (0, 255, 0) # Red if closed, Green if open
+    mouth_color = (0, 0, 255) if mouth_open_state else (0, 255, 0)       # Red if open, Green if closed
+
+    # Display text with dynamic colors
+    cv2.putText(frame, f"L EYE: {ear_left_val:.2f} ({'Closed' if left_eye_closed_state else 'Open'})", (10, 30),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, left_eye_color, 2)
+    cv2.putText(frame, f"R EYE: {ear_right_val:.2f} ({'Closed' if right_eye_closed_state else 'Open'})", (10, 60),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, right_eye_color, 2)
+    cv2.putText(frame, f"MAR: {mar_val:.2f} ({'Open' if mouth_open_state else 'Closed'})", (10, 90),
+               cv2.FONT_HERSHEY_SIMPLEX, 0.6, mouth_color, 2)
+
+    cv2.imshow('Facial Gesture Controller', frame)
+
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
+        break
+    elif key == ord('r'):
+        print("Resetting counters (manual)")
+        left_blink_counter = 0
+        right_blink_counter = 0
+        mouth_open_counter = 0
+        last_action_time = time.time()
+
+
+print("Shutting down...")
 cap.release()
 cv2.destroyAllWindows()
+# face_mesh.close() 
