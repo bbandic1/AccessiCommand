@@ -1,33 +1,115 @@
 {
     "bindings": [
-        { "trigger_type": "voice", "trigger_event": "record", "action_id": "PRESS_SPACE" },
-        { "trigger_type": "voice", "trigger_event": "next", "action_id": "PRESS_DOWN" },
-        { "trigger_type": "voice", "trigger_event": "back", "action_id": "PRESS_LEFT" },
-        { "trigger_type": "voice", "trigger_event": "go", "action_id": "PRESS_RIGHT" },
-        { "trigger_type": "voice", "trigger_event": "select", "action_id": "PRESS_ENTER" },
-        { "trigger_type": "voice", "trigger_event": "stop", "action_id": "PRESS_ESC" },
-
-        { "trigger_type": "face", "trigger_event": "LEFT_BLINK", "action_id": "PRESS_SHIFT_A_COMBO" },
-        { "trigger_type": "face", "trigger_event": "RIGHT_BLINK", "action_id": "PRESS_SHIFT_D_COMBO" },
-        { "trigger_type": "face", "trigger_event": "MOUTH_OPEN_START", "action_id": "PRESS_K_DOWN" },
-        { "trigger_type": "face", "trigger_event": "MOUTH_OPEN_STOP", "action_id": "PRESS_K_UP" },
-        { "trigger_type": "face", "trigger_event": "BOTH_EYES_CLOSED_START", "action_id": "PRESS_SPACE_DOWN" },
-        { "trigger_type": "face", "trigger_event": "BOTH_EYES_CLOSED_STOP", "action_id": "PRESS_SPACE_UP" },
-        { "trigger_type": "face", "trigger_event": "EYEBROWS_RAISED_START", "action_id": "PRESS_J_DOWN" },
-        { "trigger_type": "face", "trigger_event": "EYEBROWS_RAISED_STOP", "action_id": "PRESS_J_UP" },
-        { "trigger_type": "face", "trigger_event": "HEAD_TILT_LEFT_START", "action_id": "PRESS_A_DOWN" },
-        { "trigger_type": "face", "trigger_event": "HEAD_TILT_LEFT_STOP", "action_id": "PRESS_A_UP" },
-        { "trigger_type": "face", "trigger_event": "HEAD_TILT_RIGHT_START", "action_id": "PRESS_D_DOWN" },
-        { "trigger_type": "face", "trigger_event": "HEAD_TILT_RIGHT_STOP", "action_id": "PRESS_D_UP" },
-
-
-        { "trigger_type": "hand", "trigger_event": "OPEN_PALM", "action_id": "PRESS_H" },
-        { "trigger_type": "hand", "trigger_event": "FIST", "action_id": "PRESS_L" }, 
-        { "trigger_type": "hand", "trigger_event": "THUMBS_UP", "action_id": "PRESS_U" }, 
-        { "trigger_type": "hand", "trigger_event": "POINTING_INDEX", "action_id": "PRESS_P" },
-        { "trigger_type": "hand", "trigger_event": "VICTORY", "action_id": "PRESS_V" },
-        { "trigger_type": "hand", "trigger_event": "HAND_GESTURE_NONE", "action_id": null } 
-
+        {
+            "trigger_type": "voice",
+            "trigger_event": "record",
+            "action_id": "PRESS_SPACE"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "next",
+            "action_id": "PRESS_DOWN"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "back",
+            "action_id": "PRESS_LEFT"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "go",
+            "action_id": "PRESS_RIGHT"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "select",
+            "action_id": "PRESS_ENTER"
+        },
+        {
+            "trigger_type": "voice",
+            "trigger_event": "stop",
+            "action_id": "PRESS_ESC"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "LEFT_BLINK",
+            "action_id": "PRESS_SHIFT_A_COMBO"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "RIGHT_BLINK",
+            "action_id": "PRESS_SHIFT_D_COMBO"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "BOTH_EYES_CLOSED_START",
+            "action_id": "PRESS_SPACE_DOWN"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "BOTH_EYES_CLOSED_STOP",
+            "action_id": "PRESS_SPACE_UP"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "EYEBROWS_RAISED_START",
+            "action_id": "PRESS_J_DOWN"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "EYEBROWS_RAISED_STOP",
+            "action_id": "PRESS_J_UP"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "HEAD_TILT_LEFT_START",
+            "action_id": "PRESS_A_DOWN"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "HEAD_TILT_LEFT_STOP",
+            "action_id": "PRESS_A_UP"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "HEAD_TILT_RIGHT_START",
+            "action_id": "PRESS_D_DOWN"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "HEAD_TILT_RIGHT_STOP",
+            "action_id": "PRESS_D_UP"
+        },
+        {
+            "trigger_type": "hand",
+            "trigger_event": "OPEN_PALM",
+            "action_id": "PRESS_H"
+        },
+        {
+            "trigger_type": "hand",
+            "trigger_event": "FIST",
+            "action_id": "PRESS_L"
+        },
+        {
+            "trigger_type": "hand",
+            "trigger_event": "THUMBS_UP",
+            "action_id": "PRESS_U"
+        },
+        {
+            "trigger_type": "hand",
+            "trigger_event": "POINTING_INDEX",
+            "action_id": "PRESS_P"
+        },
+        {
+            "trigger_type": "hand",
+            "trigger_event": "VICTORY",
+            "action_id": "PRESS_V"
+        },
+        {
+            "trigger_type": "hand",
+            "trigger_event": "HAND_GESTURE_NONE",
+            "action_id": null
+        }
     ],
     "settings": {
         "voice_detector": {
@@ -36,7 +118,7 @@
         },
         "facial_detector": {
             "camera_index": 0,
-            "ear_threshold": 0.20,
+            "ear_threshold": 0.2,
             "mar_threshold": 0.35,
             "err_threshold": 1.34,
             "both_eyes_closed_frames": 2,
@@ -46,17 +128,17 @@
             "head_tilt_right_max": 160,
             "consec_frames_mouth": 3,
             "consec_frames_eyebrow": 3,
-            "consec_frames_head_tilt": 2, 
+            "consec_frames_head_tilt": 2,
             "blink_cooldown": 0.3,
-            "show_video": true 
+            "show_video": true
         },
         "hand_detector": {
-             "camera_index": 0,
-             "max_num_hands": 1,
-             "min_detection_confidence": 0.7,
-             "min_tracking_confidence": 0.5,
-             "consec_frames_for_gesture": 5, 
-             "show_video": true
+            "camera_index": 0,
+            "max_num_hands": 1,
+            "min_detection_confidence": 0.7,
+            "min_tracking_confidence": 0.5,
+            "consec_frames_for_gesture": 5,
+            "show_video": true
         }
     }
 }
