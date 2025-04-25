@@ -44,7 +44,7 @@
             "consec_frames_eyebrow": 3,
             "consec_frames_head_tilt": 3,
             "blink_cooldown": 0.3,
-            "show_video": false
+            "show_video": true
         }
     }
 }
