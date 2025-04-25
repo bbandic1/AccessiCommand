@@ -229,13 +229,12 @@ if __name__ == '__main__':
     config_file_path = os.path.join(project_root, "config.json")
     print(f"Using config file: {config_file_path}")
     if not os.path.exists(config_file_path): print(f"ERROR: Config file not found!"); sys.exit(1)
-
     # Create the Engine - it will now initialize both detectors if bindings exist
     engine = Engine(config_path=config_file_path)
     engine.start() # This starts both detector threads
 
     if not engine.detectors: print("\nWARN: No detectors initialized. Check config.")
-    else: print(f"\nEngine running with detectors: {list(engine.detectors.keys())}")
+    else: print(f"\nEngine running with AA jdetectors: {list(engine.detectors.keys())}")
     print("Perform configured actions (voice/face). Press Ctrl+C to stop.")
 
     try:
