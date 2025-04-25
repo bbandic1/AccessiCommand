@@ -5,7 +5,6 @@ import time
 import math
 
 # --- MediaPipe Face Mesh Setup ---
-# Removed mp_drawing and mp_drawing_styles as we'll draw manually
 mp_face_mesh = mp.solutions.face_mesh
 
 face_mesh = mp_face_mesh.FaceMesh(
@@ -37,6 +36,7 @@ right_eye_closed_state = False
 mouth_open_state = False
 last_action_time = 0
 action_delay = 0.5
+key_held = None  # To track which key is currently being held down
 
 # --- Thresholds ---
 EAR_THRESHOLD = 0.20
@@ -61,7 +61,6 @@ def calculate_ear(eye_landmarks):
         ear = (v1 + v2) / (2.0 * h)
         return ear
     except IndexError:
-        # print("Warning: Index error calculating EAR") # Keep console less noisy
         return 1.0
 
 def calculate_mar(landmarks, corner_indices, inner_vertical_indices):
@@ -76,14 +75,16 @@ def calculate_mar(landmarks, corner_indices, inner_vertical_indices):
         mar = vertical_dist / horizontal_dist
         return mar
     except IndexError:
-        # print("Warning: Index error calculating MAR") # Keep console less noisy
         return 0
 
+def release_key():
+    global key_held
+    if key_held is not None:
+        pyautogui.keyUp(key_held)
+        key_held = None
+
 print("Starting Facial Controller. Press 'q' to quit.")
-print(f"Screen Size: {screen_w}x{screen_h}")
-print("Ensure the application you want to control is active.")
-print(f"Settings: EAR Threshold={EAR_THRESHOLD}, MAR Threshold={MAR_THRESHOLD}, Delay={action_delay}s")
-print("--- TUNING REQUIRED FOR THRESHOLDS! ---")
+print("Hold eye closed to keep key pressed.")
 
 while True:
     ret, frame = cap.read()
@@ -100,7 +101,7 @@ while True:
     results = face_mesh.process(rgb_frame)
     rgb_frame.flags.writeable = True
 
-    frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR) # Convert back for drawing
+    frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
 
     ear_left_val = 1.0
     ear_right_val = 1.0
@@ -109,9 +110,8 @@ while True:
     if results.multi_face_landmarks:
         landmarks = results.multi_face_landmarks[0].landmark
 
-        # Use the actual landmark indices directly from the constants
-        person_right_eye_points = [landmarks[i] for i in LEFT_EYE_INDICES] # Eye on left of screen
-        person_left_eye_points = [landmarks[i] for i in RIGHT_EYE_INDICES] # Eye on right of screen
+        person_right_eye_points = [landmarks[i] for i in LEFT_EYE_INDICES]
+        person_left_eye_points = [landmarks[i] for i in RIGHT_EYE_INDICES]
 
         ear_left_val = calculate_ear(person_left_eye_points)
         ear_right_val = calculate_ear(person_right_eye_points)
@@ -138,71 +138,66 @@ while True:
 
         mouth_open_state = mouth_open_counter >= CONSEC_FRAMES_MOUTH
 
-        current_time = time.time()
-        if current_time - last_action_time > action_delay:
-            action_taken = False
-            if left_eye_closed_state and not right_eye_closed_state:
-                pyautogui.press('left')
-                print(f"ACTION @ {current_time:.2f}: Left Wink -> LEFT")
-                action_taken = True
-            elif right_eye_closed_state and not left_eye_closed_state:
-                pyautogui.press('right')
-                print(f"ACTION @ {current_time:.2f}: Right Wink -> RIGHT")
-                action_taken = True
-            elif left_eye_closed_state and right_eye_closed_state:
-                pyautogui.press('space')
-                print(f"ACTION @ {current_time:.2f}: Blink -> SPACE")
-                action_taken = True
-            elif mouth_open_state:
-                pyautogui.press('down')
-                print(f"ACTION @ {current_time:.2f}: Mouth Open -> DOWN")
-                action_taken = True
+        # Key press/hold logic
+        if left_eye_closed_state and not right_eye_closed_state:
+            if key_held != 'a':
+                release_key()
+                pyautogui.keyDown('a')
+                key_held = 'a'
+                print("Holding 'a' key")
+        elif right_eye_closed_state and not left_eye_closed_state:
+            if key_held != 'd':
+                release_key()
+                pyautogui.keyDown('d')
+                key_held = 'd'
+                print("Holding 'd' key")
+        elif left_eye_closed_state and right_eye_closed_state:
+            if key_held != 'k':
+                release_key()
+                pyautogui.keyDown('k')
+                key_held = 'k'
+                print("Holding 'k' key")
+        elif mouth_open_state:
+            if key_held != 'space':
+                release_key()
+                pyautogui.keyDown('space')
+                key_held = 'space'
+                print("Holding SPACE key")
+        else:
+            release_key()
 
-            if action_taken:
-                last_action_time = current_time
-
-        # --- Visualization: Draw circles on specific landmarks ---
+        # Visualization
         for index in LANDMARKS_TO_DRAW:
             try:
                 point = landmarks[index]
-                # Denormalize coordinates
                 x = int(point.x * frame_width)
                 y = int(point.y * frame_height)
-                # Draw a small green circle
-                cv2.circle(frame, (x, y), 2, (0, 255, 0), -1) # -1 fills the circle
+                cv2.circle(frame, (x, y), 2, (0, 255, 0), -1)
             except IndexError:
-                 # This shouldn't happen if landmarks were detected, but good practice
                 pass
 
+    # Display status
+    left_eye_color = (0, 0, 255) if left_eye_closed_state else (0, 255, 0)
+    right_eye_color = (0, 0, 255) if right_eye_closed_state else (0, 255, 0)
+    mouth_color = (0, 0, 255) if mouth_open_state else (0, 255, 0)
 
-    # --- Display Status Text ----
-    # Determine colors based on state
-    left_eye_color = (0, 0, 255) if left_eye_closed_state else (0, 255, 0)  # Red if closed, Green if open
-    right_eye_color = (0, 0, 255) if right_eye_closed_state else (0, 255, 0) # Red if closed, Green if open
-    mouth_color = (0, 0, 255) if mouth_open_state else (0, 255, 0)       # Red if open, Green if closed
-
-    # Display text with dynamic colors
     cv2.putText(frame, f"L EYE: {ear_left_val:.2f} ({'Closed' if left_eye_closed_state else 'Open'})", (10, 30),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, left_eye_color, 2)
     cv2.putText(frame, f"R EYE: {ear_right_val:.2f} ({'Closed' if right_eye_closed_state else 'Open'})", (10, 60),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, right_eye_color, 2)
     cv2.putText(frame, f"MAR: {mar_val:.2f} ({'Open' if mouth_open_state else 'Closed'})", (10, 90),
                cv2.FONT_HERSHEY_SIMPLEX, 0.6, mouth_color, 2)
+    if key_held:
+        cv2.putText(frame, f"Holding: {key_held}", (10, 120),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     cv2.imshow('Facial Gesture Controller', frame)
 
     key = cv2.waitKey(1) & 0xFF
     if key == ord('q'):
         break
-    elif key == ord('r'):
-        print("Resetting counters (manual)")
-        left_blink_counter = 0
-        right_blink_counter = 0
-        mouth_open_counter = 0
-        last_action_time = time.time()
 
-
-print("Shutting down...")
+# Clean up
+release_key()
 cap.release()
 cv2.destroyAllWindows()
-# face_mesh.close() 
