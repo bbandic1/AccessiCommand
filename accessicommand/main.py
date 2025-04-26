@@ -1,73 +1,65 @@
 # accessicommand/main.py
 import tkinter as tk
-import os
-import sys
-import traceback
+import os, sys, traceback
 
-# --- Adjust path for imports ---
-# Get the absolute path to the project root (FacialGestures/)
+# Adjust path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-# print("Sys path adjusted in main.py:", sys.path) # Optional debug
+if project_root not in sys.path: sys.path.insert(0, project_root)
 
-# --- Import Core Components ---
+# Import Core Components
 try:
     from accessicommand.core.engine import Engine
     from accessicommand.config.manager import ConfigManager
     from accessicommand.ui.main_window import AppGUI
-except ImportError as e:
-    print(f"ERROR: Failed to import necessary modules in main.py: {e}")
-    print("Ensure the script is run correctly and all package components exist.")
-    traceback.print_exc()
-    sys.exit(1)
+except ImportError as e: print(f"ERROR importing: {e}"); traceback.print_exc(); sys.exit(1)
+
+# --- Global scope variables (optional, could also pass app_gui via methods) ---
+engine = None
+root = None
+
+def shutdown_application():
+    """Cleans up resources when application exits."""
+    global engine, root
+    print("Application exiting. Ensuring engine is stopped...")
+    if engine and engine.is_running:
+        try: engine.stop()
+        except Exception as stop_e: print(f"ERROR final stop: {stop_e}")
+    if root:
+         try:
+             if root.winfo_exists(): root.destroy()
+         except tk.TclError: pass
+    print("--- AccessiCommand Finished ---")
 
 if __name__ == "__main__":
     print("--- Starting AccessiCommand Application ---")
-
-    # --- Configuration ---
-    # Determine path to config file (assuming it's in project root)
     config_file_path = os.path.join(project_root, "config.json")
     print(f"Using configuration file: {config_file_path}")
 
-    engine = None # Initialize engine variable
-
     try:
-        # --- Initialize Core Components ---
         print("Initializing Config Manager...")
         config_manager = ConfigManager(config_path=config_file_path)
 
-        print("Initializing Engine...")
-        # Engine uses the config manager internally
-        engine = Engine(config_path=config_file_path)
-
-        # --- Initialize GUI ---
+        # --- Create GUI first ---
         print("Initializing GUI...")
         root = tk.Tk()
-        # Pass the engine and config_manager instances to the GUI
-        app_gui = AppGUI(root, engine, config_manager)
+        # Create AppGUI instance - Engine is None initially
+        app_gui = AppGUI(root, None, config_manager)
 
-        # --- Set window close behavior ---
-        # Ensures engine is stopped when window is closed via 'X' button
-        root.protocol("WM_DELETE_WINDOW", app_gui.on_close)
+        # --- Create Engine, passing GUI instance ---
+        print("Initializing Engine...")
+        engine = Engine(config_path=config_file_path, app_gui_instance=app_gui)
 
-        # --- Start GUI Event Loop ---
+        # --- Give GUI the actual Engine instance ---
+        app_gui.engine = engine
+
+        # Set window close behavior
+        root.protocol("WM_DELETE_WINDOW", app_gui.on_close) # Use GUI's close method
+
+        # Start GUI main loop
         print("Starting GUI main loop...")
-        root.mainloop() # This blocks until the window is closed
+        root.mainloop()
 
-    except Exception as e:
-        print("\n--- An Unhandled Error Occurred ---")
-        traceback.print_exc()
-        print(f"Error details: {e}")
-        print("----------------------------------")
-
+    except Exception as e: print("\n--- Unhandled Error ---"); traceback.print_exc(); print(f"{e}")
     finally:
-        # --- Ensure Engine Stops on Exit ---
-        # This runs if the mainloop exits or an error occurs
-        print("Application exiting. Ensuring engine is stopped...")
-        if engine and engine.is_running:
-            try:
-                engine.stop()
-            except Exception as stop_e:
-                 print(f"ERROR during final engine stop: {stop_e}")
-        print("--- AccessiCommand Finished ---")
+        # Call the defined shutdown function
+        shutdown_application()
