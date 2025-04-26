@@ -2,7 +2,7 @@
     "bindings": [
         {
             "trigger_type": "voice",
-            "trigger_event": "record",
+            "trigger_event": "space",
             "action_id": "PRESS_SPACE"
         },
         {
@@ -52,16 +52,6 @@
         },
         {
             "trigger_type": "face",
-            "trigger_event": "EYEBROWS_RAISED_START",
-            "action_id": "PRESS_J_DOWN"
-        },
-        {
-            "trigger_type": "face",
-            "trigger_event": "EYEBROWS_RAISED_STOP",
-            "action_id": "PRESS_J_UP"
-        },
-        {
-            "trigger_type": "face",
             "trigger_event": "HEAD_TILT_LEFT_START",
             "action_id": "PRESS_A_DOWN"
         },
@@ -83,32 +73,32 @@
         {
             "trigger_type": "hand",
             "trigger_event": "OPEN_PALM",
-            "action_id": "PRESS_H"
+            "action_id": "PRESS_J_UP"
         },
         {
             "trigger_type": "hand",
             "trigger_event": "FIST",
-            "action_id": "PRESS_L"
+            "action_id": "SCROLL_DOWN"
         },
         {
             "trigger_type": "hand",
             "trigger_event": "THUMBS_UP",
-            "action_id": "PRESS_U"
+            "action_id": "PRESS_ALT_F4"
         },
         {
             "trigger_type": "hand",
             "trigger_event": "POINTING_INDEX",
-            "action_id": "PRESS_P"
+            "action_id": "PRESS_CTRL_ALT_DEL"
         },
         {
             "trigger_type": "hand",
             "trigger_event": "VICTORY",
-            "action_id": "PRESS_V"
+            "action_id": "TAKE_SCREENSHOT"
         },
         {
             "trigger_type": "hand",
             "trigger_event": "HAND_GESTURE_NONE",
-            "action_id": null
+            "action_id": "PRESS_J_DOWN"
         }
     ],
     "settings": {
