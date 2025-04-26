@@ -6,15 +6,13 @@ import traceback
 # --- Imports ---
 try:
     from accessicommand.actions.registry import get_available_action_ids
-    # Import event constants directly from detectors
-    # Assuming detectors export these lists or constants
     from accessicommand.detectors.facial_detector import (
         LEFT_BLINK_EVENT, RIGHT_BLINK_EVENT, MOUTH_OPEN_START_EVENT, MOUTH_OPEN_STOP_EVENT,
         BOTH_EYES_CLOSED_START_EVENT, BOTH_EYES_CLOSED_STOP_EVENT, EYEBROWS_RAISED_START_EVENT,
         EYEBROWS_RAISED_STOP_EVENT, HEAD_TILT_LEFT_START_EVENT, HEAD_TILT_LEFT_STOP_EVENT,
         HEAD_TILT_RIGHT_START_EVENT, HEAD_TILT_RIGHT_STOP_EVENT
     )
-    FACE_EVENT_LIST = sorted([ # Define list locally if not exported
+    FACE_EVENT_LIST = sorted([
         LEFT_BLINK_EVENT, RIGHT_BLINK_EVENT, MOUTH_OPEN_START_EVENT, MOUTH_OPEN_STOP_EVENT,
         BOTH_EYES_CLOSED_START_EVENT, BOTH_EYES_CLOSED_STOP_EVENT, EYEBROWS_RAISED_START_EVENT,
         EYEBROWS_RAISED_STOP_EVENT, HEAD_TILT_LEFT_START_EVENT, HEAD_TILT_LEFT_STOP_EVENT,
@@ -25,35 +23,26 @@ try:
             OPEN_PALM_EVENT, FIST_EVENT, THUMBS_UP_EVENT, POINTING_INDEX_EVENT,
             VICTORY_EVENT, GESTURE_NONE_EVENT
         )
-        HAND_EVENT_LIST = sorted([ # Define list locally
-            OPEN_PALM_EVENT, FIST_EVENT, THUMBS_UP_EVENT, POINTING_INDEX_EVENT,
-            VICTORY_EVENT # Exclude GESTURE_NONE_EVENT from dropdown
-        ])
-    except ImportError:
-        print("WARN: Hand detector events not found for config dialog.")
-        HAND_EVENT_LIST = ["DUMMY_HAND_EVENT"]
+        HAND_EVENT_LIST = sorted([ OPEN_PALM_EVENT, FIST_EVENT, THUMBS_UP_EVENT, POINTING_INDEX_EVENT, VICTORY_EVENT ])
+    except ImportError: print("WARN: Hand detector events not found."); HAND_EVENT_LIST = ["DUMMY_HAND_EVENT"]
     _imports_valid = True
 except ImportError as e:
-    print(f"ERROR importing components in config_dialog.py: {e}")
-    _imports_valid = False
+    print(f"ERROR importing components: {e}"); _imports_valid = False
     def get_available_action_ids(): return ["ACTION_NOT_FOUND"]
-    FACE_EVENT_LIST = ["DUMMY_FACE_EVENT"]
-    HAND_EVENT_LIST = ["DUMMY_HAND_EVENT"]
+    FACE_EVENT_LIST = ["DUMMY_FACE_EVENT"]; HAND_EVENT_LIST = ["DUMMY_HAND_EVENT"]
 
 TRIGGER_TYPES = ["voice", "face", "hand"]
 
 
 class ConfigDialog:
     """ Configuration dialog window using Tkinter/ttk. """
-    # --- Corrected __init__ signature ---
     def __init__(self, parent, config_manager, engine, restart_signal_callback):
         if not _imports_valid: messagebox.showerror("Import Error", "Failed Config Dialog load."); return
 
         self.parent = parent
         self.config_manager = config_manager
         self.engine = engine
-        # --- Store the callback ---
-        self.signal_main_gui = restart_signal_callback # Use the passed callback
+        self.signal_main_gui = restart_signal_callback
 
         self.top = tk.Toplevel(parent); self.top.title("Configure Bindings")
         self.top.configure(bg='#2E2E2E'); self.top.transient(parent); self.top.grab_set()
@@ -63,6 +52,11 @@ class ConfigDialog:
         self.button_font=font.Font(family="Segoe UI",size=10); self.heading_font=font.Font(family="Segoe UI",size=10,weight="bold")
         self.style=ttk.Style(); self.style.theme_use('clam')
         BG_COLOR='#2E2E2E'; FG_COLOR='#FFFFFF'; ACCENT_COLOR='#0078D7'; BUTTON_BG='#4A4A4A'; BUTTON_FG=FG_COLOR; BUTTON_ACTIVE_BG='#5A5A5A'; BUTTON_DISABLED_FG='#888888'; LABELFRAME_BG=BG_COLOR; LABELFRAME_FG=FG_COLOR; TREE_BG='#3C3C3C'; TREE_FG=FG_COLOR; TREE_FIELD_BG='#505050'; TREE_HEADING_BG='#4A4A4A'; TREE_HEADING_FG=FG_COLOR; ODD_ROW_BG=TREE_BG; EVEN_ROW_BG='#444444'
+        LISTBOX_BG = '#404040'; LISTBOX_FG = FG_COLOR; LISTBOX_SELECT_BG = ACCENT_COLOR; LISTBOX_SELECT_FG = FG_COLOR
+        ENTRY_BG = TREE_FIELD_BG # Use Treeview field background for entries/combobox field
+        ENTRY_FG = FG_COLOR
+
+        # Apply Styles
         self.style.configure('.', background=BG_COLOR, foreground=FG_COLOR, font=self.default_font)
         self.style.configure('TFrame', background=BG_COLOR); self.style.configure('TLabel', background=BG_COLOR, foreground=FG_COLOR)
         self.style.configure('TLabelframe', background=LABELFRAME_BG, borderwidth=1, relief=tk.GROOVE); self.style.configure('TLabelframe.Label', background=LABELFRAME_BG, foreground=LABELFRAME_FG, font=self.heading_font)
@@ -72,9 +66,50 @@ class ConfigDialog:
         self.style.map("Treeview", background=[('selected', ACCENT_COLOR)], foreground=[('selected', FG_COLOR)])
         self.style.configure("Treeview.Heading", background=TREE_HEADING_BG, foreground=TREE_HEADING_FG, font=self.heading_font, relief=tk.FLAT, padding=(5,5))
         self.style.map("Treeview.Heading", relief=[('active', tk.GROOVE), ('!active', tk.FLAT)])
-        self.style.configure('TCombobox', fieldbackground=TREE_FIELD_BG, background=BUTTON_BG, foreground=FG_COLOR, arrowcolor=FG_COLOR, selectbackground=ACCENT_COLOR, selectforeground=FG_COLOR)
-        self.style.configure('TEntry', fieldbackground=TREE_FIELD_BG, foreground=FG_COLOR, insertcolor=FG_COLOR)
 
+        # --- Corrected Combobox & Entry Styling ---
+        # Style for the text entry part of Combobox and regular Entry
+        self.style.configure('TEntry',
+                             fieldbackground=ENTRY_BG,
+                             foreground=ENTRY_FG,
+                             insertcolor=FG_COLOR, # Cursor color
+                             borderwidth=1,
+                             relief=tk.FLAT)
+        self.style.map('TEntry',
+                       fieldbackground=[('disabled', '#333333'), ('readonly', ENTRY_BG)],
+                       foreground=[('disabled', BUTTON_DISABLED_FG), ('readonly', ENTRY_FG)])
+
+        # Style for Combobox (inherits TEntry for field, configure dropdown button explicitly)
+        self.style.configure('TCombobox',
+                             # fieldbackground=ENTRY_BG, # Inherited from TEntry
+                             # foreground=ENTRY_FG,      # Inherited from TEntry
+                             selectbackground=LISTBOX_SELECT_BG, # For selected text in entry field
+                             selectforeground=LISTBOX_SELECT_FG,
+                             background=BUTTON_BG,          # Background of dropdown arrow button
+                             arrowcolor=FG_COLOR,
+                             arrowsize = 15) # Make arrow slightly larger?
+        self.style.map('TCombobox',
+                       background=[('active', BUTTON_ACTIVE_BG), ('readonly', BUTTON_BG)], # Arrow button background
+                       fieldbackground=[('readonly', ENTRY_BG)], # Ensure readonly field has correct bg
+                       foreground=[('readonly', ENTRY_FG)])     # Ensure readonly field has correct fg
+
+
+        # Attempt to style the Combobox dropdown list (might be platform dependent)
+        try:
+            self.top.option_add('*TCombobox*Listbox.background', LISTBOX_BG)
+            self.top.option_add('*TCombobox*Listbox.foreground', LISTBOX_FG)
+            self.top.option_add('*TCombobox*Listbox.selectBackground', LISTBOX_SELECT_BG)
+            self.top.option_add('*TCombobox*Listbox.selectForeground', LISTBOX_SELECT_FG)
+            # Set border to 0 to avoid potential white border on dropdown list
+            self.top.option_add('*TCombobox*Listbox.borderWidth', 0)
+            self.top.option_add('*TCombobox*Listbox.highlightThickness', 0) # Try removing highlight border too
+            print("DEBUG: Applied Tkinter Listbox options for Combobox dropdown.")
+        except tk.TclError as e: print(f"WARN: Could not set Tkinter Listbox options: {e}")
+        # --- End Styling Corrections ---
+
+
+        # --- UI Layout ---
+        # (Keep the rest of the __init__ layout code as it was)
         self.current_bindings = []
         main_frame = ttk.Frame(self.top, padding="15", style='TFrame'); main_frame.pack(expand=True, fill=tk.BOTH)
         list_frame = ttk.LabelFrame(main_frame, text="Current Bindings", padding="10", style='TLabelframe'); list_frame.pack(pady=10, fill=tk.BOTH, expand=True)
@@ -98,6 +133,8 @@ class ConfigDialog:
         self._populate_action_dropdown(); self._load_bindings(); self._update_trigger_event_options()
         self.top.update_idletasks(); parent_geo = self.parent.geometry().split('+'); parent_x = int(parent_geo[1]); parent_y = int(parent_geo[2]); self.top.geometry(f"+{parent_x + 50}+{parent_y + 50}")
 
+    # --- Methods (_load_bindings, _populate_action_dropdown, etc.) ---
+    # Keep these exactly as they were in the previous working version
     def _load_bindings(self):
         try:
             for item in self.bindings_tree.get_children(): self.bindings_tree.delete(item)
@@ -117,6 +154,7 @@ class ConfigDialog:
     def _update_trigger_event_options(self, event=None):
         selected_type = self.trigger_type_var.get(); self.trigger_event_var.set("")
         if self.trigger_event_input_widget: self.trigger_event_input_widget.destroy(); self.trigger_event_input_widget = None
+        # Apply TEntry or TCombobox style explicitly when creating
         if selected_type == "voice": self.trigger_event_input_widget = ttk.Entry(self.trigger_event_input_frame, textvariable=self.trigger_event_var, width=35, style='TEntry')
         elif selected_type == "face": self.trigger_event_input_widget = ttk.Combobox(self.trigger_event_input_frame, textvariable=self.trigger_event_var, values=FACE_EVENT_LIST, state="readonly", width=35, style='TCombobox');
         elif selected_type == "hand": self.trigger_event_input_widget = ttk.Combobox(self.trigger_event_input_frame, textvariable=self.trigger_event_var, values=HAND_EVENT_LIST, state="readonly", width=35, style='TCombobox');
@@ -151,12 +189,9 @@ class ConfigDialog:
             except ValueError: messagebox.showerror("Delete Error", "Invalid selection."); print("ERROR: Invalid index during delete.")
             except Exception as e: messagebox.showerror("Delete Error", f"{e}"); traceback.print_exc()
 
-    # --- Corrected _save_and_close ---
     def _save_and_close(self):
-        """Saves bindings, stops engine, signals main GUI, and closes."""
         print("GUI: Save & Close requested.")
         if self.current_bindings is None: print("ERROR: Bindings list is None."); return
-
         print(f"GUI: Saving {len(self.current_bindings)} bindings...")
         try:
             save_success = self.config_manager.set_bindings(self.current_bindings)
@@ -166,22 +201,14 @@ class ConfigDialog:
                     print("GUI: Stopping engine after save...")
                     try: self.engine.stop()
                     except Exception as stop_e: print(f"ERROR stopping engine: {stop_e}")
-
-                # Signal the main GUI that changes were saved and engine stopped
-                if callable(self.signal_main_gui): # Check if callback exists
+                if callable(self.signal_main_gui):
                      print("GUI: Signaling main window for state update.")
-                     self.signal_main_gui() # Call the callback passed from main_window
-                else:
-                     print("WARN: No signal callback available to update main GUI state.")
-
+                     self.signal_main_gui()
+                else: print("WARN: No signal callback available.")
                 messagebox.showinfo("Saved", "Bindings saved.\nPlease click 'Start Engine' on the main window to apply changes.")
-                self.top.destroy() # Close this dialog
-            else:
-                messagebox.showerror("Save Error", "Failed to save bindings.\nCheck console.")
-        except Exception as e:
-            print(f"ERROR during save/close: {e}"); traceback.print_exc()
-            messagebox.showerror("Save Error", f"Unexpected error:\n{e}")
-    # --- END Correction ---
+                self.top.destroy()
+            else: messagebox.showerror("Save Error", "Failed to save bindings.\nCheck console.")
+        except Exception as e: print(f"ERROR during save/close: {e}"); traceback.print_exc(); messagebox.showerror("Save Error", f"Unexpected error:\n{e}")
 
     def _cancel(self):
         print("GUI: Configuration cancelled.")
