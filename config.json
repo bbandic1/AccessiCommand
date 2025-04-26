@@ -52,6 +52,16 @@
         },
         {
             "trigger_type": "face",
+            "trigger_event": "MOUTH_OPEN_START",
+            "action_id": "PRESS_SPACE_DOWN"
+        },
+        {
+            "trigger_type": "face",
+            "trigger_event": "MOUTH_OPEN_STOP",
+            "action_id": "PRESS_SPACE_UP"
+        },
+        {
+            "trigger_type": "face",
             "trigger_event": "HEAD_TILT_LEFT_START",
             "action_id": "PRESS_A_DOWN"
         },
