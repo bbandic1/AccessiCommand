@@ -45,7 +45,7 @@ AccessiCommand follows a modular architecture:
 
 1.  **Clone the Repository (if applicable):**
     ```bash
-    git clone https://github.com/YourRepo/FacialGestures.git # Replace with your actual repo URL
+    git clone https://github.com/YourRepo/AccessiCommand.git # Replace with your actual repo URL
     cd FacialGestures
     ```
 2.  **Create a Virtual Environment:**
@@ -98,7 +98,7 @@ AccessiCommand follows a modular architecture:
 ## How to Run and Use
 
 1.  **Start the Main Application:**
-    *   Open your terminal in the `FacialGestures/` root directory.
+    *   Open your terminal in the `AccessiCommand/` root directory.
     *   Activate your virtual environment (`.\.venv\Scripts\activate` or `source .venv/bin/activate`).
     *   Run the main application script:
         ```bash
@@ -108,7 +108,7 @@ AccessiCommand follows a modular architecture:
 
 2.  **Start the UI Voice Commander (Optional):**
     *   Open a **separate terminal window** (or use a split terminal).
-    *   Navigate to the `FacialGestures/` root directory.
+    *   Navigate to the `AccessiCommand/` root directory.
     *   Activate your virtual environment.
     *   Run the standalone UI commander script:
         ```bash
