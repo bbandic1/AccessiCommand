@@ -1,3 +1,9 @@
+<div align="center">
+
+# **🏆 Hackathon Winner 🏆**
+
+</div>
+
 # AccessiCommand: Control Your Computer with Voice and Gestures
 
 ## Project Description
@@ -6,7 +12,7 @@ AccessiCommand is a hackathon project aimed at creating an alternative and intui
 
 ## Features
 
-*   **Multimodal Input:** Supports control via:
+*   **Multimodal Input:** Supports control via:c
     *   Voice Commands (Configurable keywords)
     *   Facial Gestures (Blinks, eyebrow raise, mouth open, head tilt)
     *   Hand Gestures (Open palm, fist, thumbs up, pointing index, victory sign)
