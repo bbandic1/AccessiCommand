@@ -4,7 +4,7 @@
 
 </div>
 
-# AccessiCommand: Control Your Computer with Voice and Gestures
+# Gesture.io: Control Your Computer with Voice and Gestures
 
 ## Project Description
 
