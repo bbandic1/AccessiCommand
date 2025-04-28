@@ -8,7 +8,7 @@
 
 ## Project Description
 
-AccessiCommand is a hackathon project aimed at creating an alternative and intuitive way for users to interact with their computers using facial gestures, hand gestures, and voice commands. Traditional input methods (keyboard/mouse) can be limiting for various reasons, including accessibility needs or simply providing a different kind of user experience (like gaming). AccessiCommand provides a flexible framework to map these alternative inputs to standard system actions.
+Gesture.io is a hackathon project aimed at creating an alternative and intuitive way for users to interact with their computers using facial gestures, hand gestures, and voice commands. Traditional input methods (keyboard/mouse) can be limiting for various reasons, including accessibility needs or simply providing a different kind of user experience (like gaming). Gesture.io provides a flexible framework to map these alternative inputs to standard system actions.
 
 ## Features
 
@@ -52,7 +52,7 @@ AccessiCommand follows a modular architecture:
 1.  **Clone the Repository (if applicable):**
     ```bash
     git clone https://github.com/YourRepo/Gesture.io.git # Replace with your actual repo URL
-    cd FacialGestures
+    cd Gesture.io
     ```
 2.  **Create a Virtual Environment:**
     ```bash
